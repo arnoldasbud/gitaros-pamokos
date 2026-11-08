@@ -145,6 +145,15 @@ table.res{border-collapse:collapse;width:100%;font-size:.9rem}
 .btn.play{font-size:1.15rem;min-width:200px;min-height:56px;border-radius:14px}
 .drill{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;background:var(--bg);border-radius:12px;padding:14px}
 .drill .target{font-size:4rem}
+.rgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:100%;text-align:left}
+.tips{margin:0;padding-left:18px;text-align:left;display:flex;flex-direction:column;gap:6px}
+.rbeats i.on{background:var(--accent);border-color:var(--accent)}
+.rbeats i.on.first{background:var(--brass);border-color:var(--brass)}
+.calb{display:flex;flex-direction:column;align-items:center;min-width:58px;gap:0}
+.calb small{font-family:var(--f-mono);font-size:.72rem;font-weight:500}
+.calb.okc{border-color:var(--done);color:var(--done)}
+.calb.warnc{border-color:var(--brass);color:var(--brass)}
+.calb.live{background:var(--brass-soft)}
 .res td{padding:8px 10px;border-top:1px solid var(--line);white-space:nowrap}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
 </style>
@@ -158,6 +167,7 @@ table.res{border-collapse:collapse;width:100%;font-size:.9rem}
   <section id="v-metro" class="stack" hidden></section>
   <section id="v-ear" class="stack" hidden></section>
   <section id="v-ear2" class="stack" hidden></section>
+  <section id="v-cal" class="stack" hidden></section>
 </div>
 <div class="toast" id="toast" hidden></div>
 
@@ -188,7 +198,7 @@ const PHASES=[
   {id:"warm",n:"Apšilimas",m:2,h:"Pagniaužykite kumštį, patempkite pirštus atgal, pakratykite riešus. Pečiai atpalaiduoti."},
   {id:"chrom",n:"Chromatinis 1-2-3-4",m:5,bpm:60,h:"Kiekvienoje stygoje paspauskite 1, 2, 3, 4 skersines 1, 2, 3, 4 pirštais, nuo 6 stygos iki 1 ir atgal. Viena nata vienam tvaksniui. Pirštai arti stygų, spausti tik tiek, kad skambėtų švariai."},
   {id:"notes65",n:"Natos 6 ir 5 stygoje",m:4,drill:true,h:"Paspauskite „Pradėti“: programėlė atsitiktine tvarka rodys natą ir stygą. Suraskite ir sugrokite ją, sakydami pavadinimą garsiai. Mikrofonas patikrins, ar nata teisinga, ir pamatuos laiką."},
-  {id:"emam",n:"Akordai Em ir Am",m:5,bpm:60,h:"Išmokite pirštuotę. Tada grokite po 4 smūgius žemyn kiekvienam akordui pagal metronomą. Pirmiausia tikrinkite, ar skamba visos stygos."},
+  {id:"emam",n:"Akordai Em ir Am",m:5,bpm:60,changes:[["Em","Am"]],h:"Išmokite pirštuotę. Tada grokite po 4 smūgius žemyn kiekvienam akordui pagal metronomą. Pirmiausia tikrinkite, ar skamba visos stygos."},
   {id:"min1",n:"Vienos minutės keitimai",m:1,changes:[["Em","Am"]],h:"Per minutę keiskite Em ↔ Am kuo daugiau kartų, bet švariai: po kiekvieno keitimo vieną kartą užgaukite visas stygas. Programėlė skaičiuoja keitimus ir mikrofonu tikrina, ar suskambo visos akordo natos."}
  ],
  goals:["Chromatinis pratimas visose stygose švariai 60 bpm","Bet kurią natą 6 ir 5 stygoje randu per 3 sekundes","Em ↔ Am: 30 švarių keitimų per minutę","Galiu paaiškinti, kas yra pustonis ir tonas, ir kur nėra diezų"]},
@@ -334,13 +344,13 @@ document.addEventListener("visibilitychange",()=>{if(document.visibilityState===
 const T={id:null,total:0,left:0,running:false,last:0,iv:null,spent:0};
 function fmt(s){s=Math.max(0,Math.ceil(s));return String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
 function timerFor(ex){if(T.id!==ex.id){if(T.running)pauseT();T.id=ex.id;T.total=ex.m*60;T.left=T.total;T.spent=0;}}
-function startT(ex){ac();if(ex.changes&&!CH2.active)startChanges(ex);if(ex.drill&&!(P.round&&P.round.inline))startInline();timerFor(ex);if(T.left<=0)T.left=T.total;if(ex.bpm&&S.metroWithTimer!==false&&!ex.changes){setBpm(ex.bpm);if(!M.running){startM();M.byTimer=true;}}T.running=true;T.last=performance.now();clearInterval(T.iv);T.iv=setInterval(tick,250);wakeOn();paintTimer();}
+function startT(ex){ac();if(ex.changes&&!CH2.active&&!RM.active){rmCfg().mode==="rhythm"?startRhythm(ex):startChanges(ex);}if(ex.drill&&!(P.round&&P.round.inline))startInline();timerFor(ex);if(T.left<=0)T.left=T.total;if(ex.bpm&&S.metroWithTimer!==false&&!ex.changes){setBpm(ex.bpm);if(!M.running){startM();M.byTimer=true;}}T.running=true;T.last=performance.now();clearInterval(T.iv);T.iv=setInterval(tick,250);wakeOn();paintTimer();}
 function stopTimerMetro(){if(M.byTimer){M.byTimer=false;stopM();}}
-function pauseT(){if(!T.running)return;tick();T.running=false;clearInterval(T.iv);stopTimerMetro();if(P.round&&P.round.inline)endRound();if(CH2.active)endChanges();flushSpent();wakeOff();paintTimer();}
+function pauseT(){if(!T.running)return;tick();T.running=false;clearInterval(T.iv);stopTimerMetro();if(P.round&&P.round.inline)endRound();if(CH2.active)endChanges();if(RM.active)endRhythm();flushSpent();wakeOff();paintTimer();}
 function resetT(ex){pauseT();T.id=ex.id;T.total=ex.m*60;T.left=T.total;T.spent=0;paintTimer();}
 function flushSpent(){if(T.spent>0){addSecs(T.spent);T.spent=0;save();paintStats();}}
 function tick(){if(!T.running)return;const now=performance.now();const dt=(now-T.last)/1000;T.last=now;T.left-=dt;T.spent+=dt;
-  if(T.left<=0){T.left=0;T.running=false;clearInterval(T.iv);stopTimerMetro();if(P.round&&P.round.inline)endRound();if(CH2.active)endChanges();flushSpent();markDone(T.id,true);save();chime();toast("Laikas baigėsi. Pratimas atliktas!");wakeOff();renderToday();return;}
+  if(T.left<=0){T.left=0;T.running=false;clearInterval(T.iv);stopTimerMetro();if(P.round&&P.round.inline)endRound();if(CH2.active)endChanges();if(RM.active)endRhythm();flushSpent();markDone(T.id,true);save();chime();toast("Laikas baigėsi. Pratimas atliktas!");wakeOff();renderToday();return;}
   paintTimer();}
 function paintTimer(){document.querySelectorAll("[data-clock]").forEach(el=>{const id=el.dataset.clock;const ex=curEx().find(e=>e.id===id);if(!ex)return;const tot=ex.m*60;const left=T.id===id?T.left:tot;el.textContent=fmt(left);el.classList.toggle("run",T.id===id&&T.running);const bar=document.querySelector('[data-bar="'+id+'"]');if(bar)bar.style.width=((1-left/tot)*100)+"%";const b=document.querySelector('[data-start="'+id+'"]');if(b)b.textContent=(T.id===id&&T.running)?"Pauzė":(T.id===id&&left<tot&&left>0?"Tęsti":"Pradėti");});}
 
@@ -366,7 +376,7 @@ function paintStats(){const el=document.getElementById("stats");if(el)el.outerHT
 
 function renderToday(){
   const v=document.getElementById("v-today");const dn=doneToday();const open=v.querySelector("details[open]");const openId=open?open.dataset.id:null;
-  let h=stageHeader()+fretStrip()+statsHtml()+'<h2 style="margin-top:8px">Šiandienos pratimai</h2>';
+  let h=stageHeader()+`<button class="btn small" id="calOpen" style="align-self:flex-start">${calReady()?"Gitaros pritaikymas ✓":"Pritaikyti programėlę savo gitarai"}</button>`+fretStrip()+statsHtml()+'<h2 style="margin-top:8px">Šiandienos pratimai</h2>';
   curEx().forEach(ex=>{
     const d=dn.includes(ex.id);
     h+=`<details class="ex ${d?'done':''}" data-id="${ex.id}" ${openId===ex.id?'open':''}>
@@ -434,7 +444,7 @@ function startM(){const a=ac();if(!a){toast("Šis įrenginys negroja garso.");re
 function stopM(){M.running=false;M.byTimer=false;clearInterval(M.iv);document.querySelectorAll("#beats i").forEach(d=>d.classList.remove("on"));wakeOff();const g=document.getElementById("mgo");if(g)g.textContent="Pradėti";}
 
 /* ---------- wiring ---------- */
-function show(v){document.querySelectorAll("nav.tabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.v===v));["today","goals","theory","metro","ear","ear2"].forEach(k=>document.getElementById("v-"+k).hidden=k!==v);const keep=CH2.active?v==="today":P.round?(P.round.inline?v==="today":v==="ear"):(v==="ear2"&&E.mode==="match");if((P.on||P.round)&&!keep){if((P.round&&P.round.inline)||CH2.active)pauseT();else stopRound();}window.scrollTo(0,0);}
+function show(v){document.querySelectorAll("nav.tabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.v===v));if(v!=="cal"&&CAL.active)calStop();["today","goals","theory","metro","ear","ear2","cal"].forEach(k=>document.getElementById("v-"+k).hidden=k!==v);const keep=(CH2.active||RM.active)?v==="today":P.round?(P.round.inline?v==="today":v==="ear"):(v==="ear2"&&E.mode==="match");if((P.on||P.round)&&!keep){if((P.round&&P.round.inline)||CH2.active||RM.active)pauseT();else stopRound();}window.scrollTo(0,0);}
 document.querySelector("nav.tabs").addEventListener("click",e=>{const b=e.target.closest("button");if(b)show(b.dataset.v);});
 document.getElementById("app").addEventListener("click",e=>{
   const t=e.target.closest("button");if(!t)return;
@@ -451,6 +461,8 @@ document.getElementById("app").addEventListener("click",e=>{
   else if(t.id==="prev"){goPhase(S.phase-1);}
   else if(t.dataset.ear){renderEar();show("ear");}
   else if(t.dataset.eartr){if(P.on)stopRound();E.mode=t.dataset.eartr;E.q=null;renderEarTrain();show("ear2");}
+  else if(calClick(t)){}
+  else if(rhyClick(t)){}
   else if(chgClick(t)){}
   else if(earClick(t)){}
   else if(earTrainClick(t)){}
@@ -475,14 +487,15 @@ function trHist(){if(!S.trHist)S.trHist=[];return S.trHist;}
 function noteFromFreq(f){const x=12*Math.log2(f/440)+69;const r=Math.round(x);return {midi:r,pc:((r%12)+12)%12,name:NOTES[((r%12)+12)%12],oct:Math.floor(r/12)-1,cents:Math.round((x-r)*100)};}
 function detectPitch(buf,sr){
   const N=buf.length;let rms=0;for(let i=0;i<N;i++)rms+=buf[i]*buf[i];rms=Math.sqrt(rms/N);if(rms<0.012)return -1;
-  const minLag=Math.floor(sr/1100),maxLag=Math.min(N-1,Math.floor(sr/65));
-  const c=new Float32Array(maxLag+2);
-  for(let lag=0;lag<=maxLag+1;lag++){let s=0;for(let j=0;j<N-lag;j++)s+=buf[j]*buf[j+lag];c[lag]=s;}
-  let d=minLag;while(d<maxLag&&c[d]>c[d+1])d++;
-  let best=-1,pos=-1;for(let i=d;i<=maxLag;i++){if(c[i]>best){best=c[i];pos=i;}}
-  if(pos<1||best/c[0]<0.45)return -1;
-  for(let i=d;i<pos;i++){if(c[i]>c[i-1]&&c[i]>=c[i+1]&&c[i]>0.9*best){pos=i;break;}}
-  const x1=c[pos-1],x2=c[pos],x3=c[pos+1];const a=(x1+x3-2*x2)/2,b=(x3-x1)/2;const T0=a?pos-b/(2*a):pos;
+  const minLag=Math.floor(sr/1100),maxLag=Math.min(N>>1,Math.floor(sr/65));
+  const n=new Float32Array(maxLag+2);
+  for(let lag=0;lag<=maxLag+1;lag++){let r=0,m=0;for(let j=0;j<N-lag;j++){const a=buf[j],b=buf[j+lag];r+=a*b;m+=a*a+b*b;}n[lag]=m>0?2*r/m:0;}
+  let d=minLag;while(d<maxLag&&n[d]>0)d++;
+  let best=-1;for(let i=d;i<=maxLag;i++)if(n[i]>best)best=n[i];
+  if(best<0.6)return -1;
+  let pos=-1;for(let i=Math.max(d,1);i<=maxLag;i++){if(n[i]>n[i-1]&&n[i]>=n[i+1]&&n[i]>=0.9*best){pos=i;break;}}
+  if(pos<1)return -1;
+  const x1=n[pos-1],x2=n[pos],x3=n[pos+1];const a=(x1+x3-2*x2)/2,b=(x3-x1)/2;const T0=a?pos-b/(2*a):pos;
   const f=sr/T0;return (f>60&&f<1200)?f:-1;
 }
 function cellPool(){const c=trCfg();const out=[];c.strings.forEach(s=>{for(let fr=0;fr<=c.maxFret;fr++){const m=STR_MIDI[s]+fr;const n=NOTES[m%12];if(c.notes==="natural"&&!NATURAL.includes(n))continue;out.push({s,fr,m,n});}});return out;}
@@ -544,7 +557,7 @@ function stopRound(){if(P.round&&P.round.items.length>0){endRound();}else{P.roun
 
 let frameFlip=false;
 function loop(){
-  if(!P.on)return;P.raf=requestAnimationFrame(loop);if(CH2.active){chordFrame();return;}frameFlip=!frameFlip;if(frameFlip)return;
+  if(!P.on)return;P.raf=requestAnimationFrame(loop);if(CAL.active){calFrame();return;}if(RM.active){if(P.anLow)rhythmFrame();return;}if(CH2.active){chordFrame();return;}frameFlip=!frameFlip;if(frameFlip)return;
   P.an.getFloatTimeDomainData(P.buf);const f=detectPitch(P.buf,AC.sampleRate);
   P.hist.push(f<0?null:noteFromFreq(f));if(P.hist.length>5)P.hist.shift();
   const vals=P.hist.filter(Boolean);let st=null;
@@ -788,17 +801,22 @@ function chroma(){
   for(let i=Math.floor(75/hz);i<Math.min(bins,Math.ceil(1050/hz));i++){const db=P.fbuf[i];if(!isFinite(db))continue;const p=Math.pow(10,db/10);const m=69+12*Math.log2(i*hz/440);const r=Math.round(m);if(Math.abs(m-r)>0.4)continue;c[((r%12)+12)%12]+=p;}
   let s=0;for(let i=0;i<12;i++)s+=c[i];if(s<=0)return null;for(let i=0;i<12;i++)c[i]/=s;return c;
 }
-function judge(ch,name){const t=CHORD_PCS[name];const h=[...new Set(t.map(p=>(p+7)%12))].filter(p=>!t.includes(p));const pur=Math.min(1,t.reduce((a,p)=>a+ch[p],0)+0.7*h.reduce((a,p)=>a+ch[p],0));const mx=Math.max(...t.map(p=>ch[p]));const miss=t.filter(p=>ch[p]/mx<STRICT[chgCfg().strict][1]).map(p=>NOTES[p]);return {pur,miss};}
+const CALTH={lenient:[0.8,0.3,0.7],normal:[0.88,0.4,0.78],strict:[0.93,0.5,0.85]};
+function calChord(n){return S.cal&&S.cal.chords&&S.cal.chords[n];}
+function judge(ch,name){const c=calChord(name);const g=judgeGeneric(ch,name);if(!c)return {pur:g.pur,miss:g.miss,th:STRICT[chgCfg().strict]};
+  const thr=CALTH[chgCfg().strict];const sim=cosSim(ch,c.t);const t=CHORD_PCS[name];const miss=t.filter(p=>c.t[p]>0.03&&ch[p]/c.t[p]<thr[1]).map(p=>NOTES[p]);return {pur:sim,miss,th:thr};}
+function classify(ch,a,b){const ca=calChord(a),cb=calChord(b);if(ca&&cb)return cosSim(ch,ca.t)>=cosSim(ch,cb.t)?0:1;return judgeGeneric(ch,a).pur>=judgeGeneric(ch,b).pur?0:1;}
+function judgeGeneric(ch,name){const t=CHORD_PCS[name];const h=[...new Set(t.map(p=>(p+7)%12))].filter(p=>!t.includes(p));const pur=Math.min(1,t.reduce((a,p)=>a+ch[p],0)+0.7*h.reduce((a,p)=>a+ch[p],0));const mx=Math.max(...t.map(p=>ch[p]));const miss=t.filter(p=>ch[p]/mx<STRICT[chgCfg().strict][1]).map(p=>NOTES[p]);return {pur,miss};}
 function chordFrame(){
   P.an.getFloatTimeDomainData(P.buf);let rms=0;for(let i=0;i<P.buf.length;i++)rms+=P.buf[i]*P.buf[i];rms=Math.sqrt(rms/P.buf.length);
   const now=performance.now();const fl=CH2.floor;fl.push(rms);if(fl.length>8)fl.shift();const floor=Math.min(...fl);
-  if(!CH2.pendingAt&&now-CH2.lastOn>280&&rms>0.015&&rms>floor*2.2){CH2.lastOn=now;CH2.pendingAt=now+140;}
+  if(!CH2.pendingAt&&now-CH2.lastOn>280&&rms>Math.max(0.015,((S.cal&&S.cal.noise)||0)*3)&&rms>floor*2.2){CH2.lastOn=now;CH2.pendingAt=now+140;}
   if(CH2.pendingAt&&now>=CH2.pendingAt){CH2.pendingAt=0;const ch=chroma();if(ch)onStrum(ch);}
 }
 function onStrum(ch){
-  const p=CH2.pair;const ja=judge(ch,p[0]),jb=judge(ch,p[1]);const idx=ja.pur>=jb.pur?0:1;const j=idx?jb:ja;
+  const p=CH2.pair;const ja=judge(ch,p[0]),jb=judge(ch,p[1]);const idx=classify(ch,p[0],p[1]);const j=idx?jb:ja;
   if(idx!==CH2.expect){paintChg();return;}
-  const th=STRICT[chgCfg().strict];const q=(j.pur>=th[0]&&!j.miss.length)?"clean":(j.pur>=th[2]?"mid":"bad");
+  const th=j.th;const q=(j.pur>=th[0]&&!j.miss.length)?"clean":(j.pur>=th[2]?"mid":"bad");
   registerChange(q,j.miss,Math.round(j.pur*100));
 }
 function registerChange(q,miss,pur){
@@ -819,7 +837,7 @@ function endChanges(){
     if(!S.chHist)S.chHist=[];S.chHist.push(r);if(S.chHist.length>200)S.chHist.shift();CH2.result=r;save();}
   paintChg();
 }
-function chgHtml(ex){
+function chgSpeedHtml(ex){
   const c=chgCfg();
   if(CH2.active&&CH2.ex&&CH2.ex.id===ex.id){
     const next=CH2.pair[CH2.expect];const L=CH2.last;const min=Math.max((performance.now()-CH2.t0)/60000,1/60);
@@ -846,7 +864,207 @@ function chgClick(t){
   return false;
 }
 
-function renderAll(){renderToday();renderGoals();renderTheory();renderMetro();if(!P.round)renderEar();renderEarTrain();}
+
+/* ---------- ritmiški keitimai ir braukimo analizė ---------- */
+const RM={active:false,ex:null,pair:null,bpm:60,per:4,start:0,beat:0,nextT:0,iv:null,strums:[],floor:[],lastOn:0,pend:null,last:null,result:null,curBeat:-5};
+function rmCfg(){const c=chgCfg();if(!c.rbpm)c.rbpm=60;if(!c.rper)c.rper=4;if(!c.mode)c.mode="speed";return c;}
+function rmClick(time,accent){const a=AC;const o=a.createOscillator(),g=a.createGain();o.type="sine";o.frequency.value=accent?3520:2960;g.gain.setValueAtTime(0.0001,time);g.gain.exponentialRampToValueAtTime(accent?0.5:0.3,time+0.002);g.gain.exponentialRampToValueAtTime(0.0001,time+0.04);o.connect(g).connect(a.destination);o.start(time);o.stop(time+0.05);}
+function rmBeatDur(){return 60/RM.bpm;}
+function rmExpected(k){return Math.floor(Math.max(0,k)/RM.per)%2;}
+function rmSched(){
+  const a=AC;while(RM.nextT<a.currentTime+0.12){const k=RM.beat;const acc=k<0||k%RM.per===0;rmClick(RM.nextT,acc);
+    const delay=Math.max(0,(RM.nextT-a.currentTime)*1000);setTimeout(()=>{RM.curBeat=k;paintRhythmLive();},delay);
+    RM.nextT+=rmBeatDur();RM.beat++;}
+}
+async function startRhythm(ex){
+  if(RM.active)return;if(M.running)stopM();const c=rmCfg();
+  Object.assign(RM,{active:true,ex,pair:chgPair(ex),bpm:c.rbpm,per:c.rper,strums:[],floor:[],lastOn:0,pend:null,last:null,result:null,curBeat:-5});
+  const ok=await micOn();if(!RM.active){if(ok)micOff();return;}
+  if(!ok){RM.active=false;toast("Ritmo analizei reikia mikrofono.");paintChg();return;}
+  const a=AC;const lp1=a.createBiquadFilter(),lp2=a.createBiquadFilter();lp1.type=lp2.type="lowpass";lp1.frequency.value=lp2.frequency.value=900;
+  P.anLow=a.createAnalyser();P.anLow.fftSize=512;P.src.connect(lp1);lp1.connect(lp2);lp2.connect(P.anLow);P.lbuf=new Float32Array(512);
+  P.an2=a.createAnalyser();P.an2.fftSize=8192;P.an2.smoothingTimeConstant=0;P.src.connect(P.an2);P.fbuf=new Float32Array(P.an2.frequencyBinCount);
+  RM.beat=-4;RM.nextT=a.currentTime+0.25;RM.start=RM.nextT+4*rmBeatDur();clearInterval(RM.iv);RM.iv=setInterval(rmSched,25);paintChg();
+}
+function rhythmFrame(){
+  const a=AC;P.anLow.getFloatTimeDomainData(P.lbuf);let rms=0;for(let i=0;i<512;i++)rms+=P.lbuf[i]*P.lbuf[i];rms=Math.sqrt(rms/512);
+  const fl=RM.floor;fl.push(rms);if(fl.length>6)fl.shift();const floor=Math.min(...fl);const t=a.currentTime;
+  if(RM.pend){const p=RM.pend;if(rms>p.peak){p.peak=rms;p.peakT=t;}if(t>=p.t+0.15){RM.pend=null;finishStrum(p);}return;}
+  if(rms>Math.max(0.01,((S.cal&&S.cal.noiseLow)||0)*3)&&rms>floor*2&&t-RM.lastOn>0.18){RM.lastOn=t;RM.pend={t:t-0.006-(a.baseLatency||0),peak:rms,peakT:t};}
+}
+function brightness(){const an=P.an2,hz=AC.sampleRate/an.fftSize;let lo=0,hi=0;for(let i=Math.floor(75/hz);i<Math.ceil(2400/hz);i++){const db=P.fbuf[i];if(!isFinite(db))continue;const p=Math.pow(10,db/10);if(i*hz<1000)lo+=p;else hi+=p;}return lo>0?hi/lo:0;}
+function finishStrum(p){
+  const bd=rmBeatDur();const k=Math.round((p.t-RM.start)/bd);if(k<0)return;
+  const off=p.t-(RM.start+k*bd);const ch=chroma();const br=brightness();
+  let correct=null,miss=[];if(ch){const ja=judge(ch,RM.pair[0]),jb=judge(ch,RM.pair[1]);const exp=rmExpected(k);const je=exp?jb:ja,jo=exp?ja:jb;correct=classify(ch,RM.pair[0],RM.pair[1])===exp;miss=je.miss;}
+  const s={k,off,extra:Math.abs(off)>0.42*bd,peak:p.peak,rise:Math.max(0,p.peakT-p.t),br,correct,miss,change:k>0&&k%RM.per===0};
+  RM.strums.push(s);RM.last=s;paintRhythmLive();
+}
+function ltPl(n,a,b,c){const d=n%10,h=n%100;if(d===1&&h!==11)return a;if(d>=2&&d<=9&&!(h>=11&&h<=19))return b;return c;}
+function median(a){if(!a.length)return 0;const b=a.slice().sort((x,y)=>x-y);const m=b.length>>1;return b.length%2?b[m]:(b[m-1]+b[m])/2;}
+function endRhythm(){
+  if(!RM.active)return;RM.active=false;clearInterval(RM.iv);micOff();P.an2=null;P.anLow=null;
+  const S0=RM.strums.filter(s=>!s.extra);const lastBeat=S0.length?Math.max(...S0.map(s=>s.k)):0;
+  if(S0.length>=6){
+    const normal=S0.filter(s=>!s.change);const changes=S0.filter(s=>s.change);
+    const base=median((normal.length?normal:S0).map(s=>s.off));
+    const dev=S0.map(s=>Math.abs(s.off-base));const onTime=dev.filter(d=>d<=0.04).length;
+    const chLate=changes.length?changes.reduce((a,s)=>a+s.off,0)/changes.length-base:0;
+    const chOk=changes.filter(s=>s.correct&&s.off-base<=0.06).length;const chClean=changes.filter(s=>s.correct&&s.off-base<=0.06&&!s.miss.length).length;const chLateN=changes.filter(s=>s.off-base>0.06).length;
+    const hit=new Set(S0.map(s=>s.k));let missed=0;for(let k=0;k<=lastBeat;k++)if(!hit.has(k))missed++;
+    const pk=S0.map(s=>s.peak);const pm=median(pk);const mean=pk.reduce((a,b)=>a+b,0)/pk.length;const sd=Math.sqrt(pk.reduce((a,b)=>a+(b-mean)*(b-mean),0)/pk.length);
+    const refs=RM.pair.map(calChord).filter(Boolean);const calRef=refs.length>0;const refP=calRef?refs.reduce((a,x)=>a+x.peak,0)/refs.length:pm;const loud=pk.filter(x=>x>refP*(calRef?1.6:1.35)).length,soft=pk.filter(x=>x<refP*(calRef?0.55:0.65)).length;
+    const bm=calRef?refs.reduce((a,x)=>a+x.br,0)/refs.length:median(S0.map(s=>s.br));const harsh=S0.filter(s=>bm>0&&s.br>bm*1.6).length;
+    const rise=Math.round(median(S0.map(s=>s.rise))*1000);
+    const r={d:todayStr(),pair:RM.pair.join("–"),bpm:RM.bpm,per:RM.per,n:S0.length,extra:RM.strums.length-S0.length,onTime:Math.round(100*onTime/S0.length),spread:Math.round(median(dev)*1000),chLate:Math.round(chLate*1000),chLateN,changes:changes.length,chOk,chClean,missed,steady:Math.max(0,Math.round(100-100*sd/mean)),calRef,loud,soft,harsh,rise};
+    const tips=[];
+    if(r.missed>Math.max(2,lastBeat*0.1))tips.push("Praleidote "+r.missed+" tvaksnius. Sumažinkite tempą, kad spėtumėte užgauti kiekvieną.");
+    if(r.chLateN)tips.push(r.chLateN+" "+ltPl(r.chLateN,"keitimas","keitimai","keitimų")+" pavėlavo (vidutiniškai "+Math.max(0,r.chLate)+" ms). Pradėkite kelti pirštus jau paskutiniame akordo tvaksnyje. Geriau tuščios stygos ant pirmo tvaksnio nei pavėlavęs akordas.");
+    if(r.changes&&changes.filter(s=>!s.correct).length)tips.push("Ne visada laiku suskamba naujas akordas. Kelis kartus pakeiskite akordą tyliai, be braukimo, žiūrėdami į pirštus.");
+    if(r.steady<70||r.loud+r.soft>r.n*0.25)tips.push("Braukimų stiprumas nevienodas. Braukite iš riešo, atpalaiduota ranka, tolygiu judesiu.");
+    if(r.harsh>r.n*0.2)tips.push(r.harsh+" "+ltPl(r.harsh,"braukimas skambėjo","braukimai skambėjo","braukimų skambėjo")+" šiurkščiai (barška). Braukite lengviau ir tikrinkite, ar pirštai spaudžia arti skersinės.");
+    if(r.rise>120)tips.push("Braukimas gana lėtas ("+r.rise+" ms). Perbraukite stygas vienu greitesniu judesiu.");
+    if(!tips.length&&r.onTime>=80)tips.push("Puikiai! Kitą kartą pakelkite tempą 5 bpm"+(RM.per===4?" arba keiskite kas 2 tvaksnius":"")+".");
+    r.tips=tips;if(!S.rhHist)S.rhHist=[];S.rhHist.push(r);if(S.rhHist.length>200)S.rhHist.shift();RM.result=r;save();
+  }else RM.result={tooShort:true};
+  paintChg();
+}
+function paintRhythmLive(){
+  const box=document.querySelector(`[data-chbox="${RM.ex&&RM.ex.id}"]`);if(!box||!RM.active)return;
+  const k=RM.curBeat;const nowC=RM.pair[rmExpected(k)];const nextC=RM.pair[1-rmExpected(k)];
+  const pos=k<0?k+4:(k%RM.per);
+  const el=box.querySelector("#rmNow");if(!el){box.innerHTML=chgHtml(RM.ex);return;}
+  el.textContent=k<0?String(-k):nowC;box.querySelector("#rmNext").textContent=k<0?"Pasiruoškite: "+RM.pair[0]:"Toliau: "+nextC+" po "+(RM.per-pos)+" tv.";
+  box.querySelectorAll(".rbeats i").forEach((d,i)=>{d.classList.toggle("on",i===(k<0?k+4:pos)%RM.per);});
+  const L=RM.last;const f=box.querySelector("#rmLast");
+  if(f&&L){const ms=Math.round(L.off*1000);f.className="heard "+(L.extra?"bad":Math.abs(ms)<=40?"good":"bad");f.textContent=L.extra?"Braukimas tarp tvaksnių":(ms>0?"+"+ms+" ms vėliau":ms<0?ms+" ms anksčiau":"Tiksliai")+(L.change?(L.correct?" · keitimas laiku":" · akordas dar nepakeistas"):"")+(L.miss.length&&L.correct?" · neskamba "+L.miss.join(", "):"");}
+  const n=box.querySelector("#rmCount");if(n)n.textContent=RM.strums.filter(s=>!s.extra).length;
+}
+function rhythmHtml(ex){
+  const c=rmCfg();
+  if(RM.active&&RM.ex&&RM.ex.id===ex.id){
+    return `<span class="eyebrow">Ritmiški keitimai · ${RM.bpm} bpm · kas ${RM.per} tv.</span><div class="target" id="rmNow">…</div><div class="strlabel" id="rmNext" style="font-size:1.05rem"></div>
+     <div class="beats rbeats">${Array.from({length:RM.per},(_,i)=>`<i class="${i===0?'first':''}"></i>`).join('')}</div>
+     <span class="heard" id="rmLast">Po 4 tvaksnių įžangos braukite žemyn ant kiekvieno tvaksnio</span><span class="muted" style="font-size:.85rem">Braukimų: <b id="rmCount">0</b></span>`;
+  }
+  const bp=[50,60,70,80,90].map(b=>`<button class="btn small" data-rbpm="${b}" ${tog(c.rbpm===b)}>${b}</button>`).join('');
+  const pe=[4,2].map(n=>`<button class="btn small" data-rper="${n}" ${tog(c.rper===n)}>kas ${n}</button>`).join('');
+  const R=RM.result&&RM.ex&&RM.ex.id===ex.id?RM.result:null;
+  let res='';
+  if(R&&R.tooShort)res='<span class="muted">Per mažai braukimų analizei. Pabandykite ilgiau.</span>';
+  else if(R)res=`<div class="rgrid">
+     <div class="stat"><b>${R.onTime}%</b><small>braukimų laiku (±40 ms)</small></div>
+     <div class="stat"><b>${R.chOk}/${R.changes}</b><small>keitimų laiku${R.changes?', '+R.chClean+' švarūs':''}</small></div>
+     <div class="stat"><b>${R.chLate>0?'+':''}${R.chLate} ms</b><small>vid. keitimo vėlavimas</small></div>
+     <div class="stat"><b>${R.steady}%</b><small>stiprumo pastovumas</small></div>
+     <div class="stat"><b>${R.missed}</b><small>praleisti tvaksniai</small></div>
+     <div class="stat"><b>${R.harsh}</b><small>šiurkštūs braukimai</small></div></div>
+     ${R.loud+R.soft?`<span class="muted" style="font-size:.88rem">Per stiprūs: ${R.loud}, per silpni: ${R.soft} (lyginant su ${R.calRef?"jūsų gitaros etalonu":"jūsų vidutiniu braukimu"}). Braukimo trukmė ~${R.rise} ms.</span>`:`<span class="muted" style="font-size:.88rem">Braukimo trukmė ~${R.rise} ms.</span>`}
+     <ul class="tips">${R.tips.map(t=>`<li>${esc(t)}</li>`).join('')}</ul>`;
+  return `${res}<span class="eyebrow">Tempas (bpm)</span><div class="row">${bp}</div><span class="eyebrow">Keisti akordą</span><div class="row">${pe}</div>
+   <span class="muted" style="font-size:.88rem">Metronomas muša 4 įžangos tvaksnius, tada braukite žemyn ant kiekvieno tvaksnio ir keiskite akordą ties paryškintu tvaksniu. Programėlė matuoja, ar pataikote į tvaksnį, ar keitimai laiku, ar braukimai vienodo stiprumo ir ar neskamba šiurkščiai. Geriausiai veikia su ausinėmis.</span>`;
+}
+function rhyClick(t){
+  if(t.dataset.cmode){rmCfg().mode=t.dataset.cmode;save();paintChg();return true;}
+  if(t.dataset.rbpm){rmCfg().rbpm=+t.dataset.rbpm;save();paintChg();return true;}
+  if(t.dataset.rper){rmCfg().rper=+t.dataset.rper;save();paintChg();return true;}
+  return false;
+}
+
+function chgHtml(ex){
+  if(RM.active&&RM.ex&&RM.ex.id===ex.id)return rhythmHtml(ex);
+  if(CH2.active&&CH2.ex&&CH2.ex.id===ex.id)return chgSpeedHtml(ex);
+  const c=rmCfg();
+  const tabs=`<div class="row"><button class="btn small" data-cmode="speed" ${tog(c.mode==="speed")}>Greitis (1 min)</button><button class="btn small" data-cmode="rhythm" ${tog(c.mode==="rhythm")}>Ritmas ir braukimas</button></div>`;
+  if(c.mode==="rhythm"){const pairs=ex.changes.map((p,i)=>`<button class="btn small" data-chp="${i}" data-chx="${ex.id}" ${tog(chgPair(ex)===p)}>${p.join(" ↔ ")}</button>`).join('');
+    return tabs+`<span class="eyebrow">Akordų pora</span><div class="row">${pairs}</div>`+rhythmHtml(ex);}
+  return tabs+(calReady()?"":`<span class="muted" style="font-size:.85rem">Patarimas: įrašykite <b>gitaros etaloną</b> (mygtukas viršuje), tada kokybė bus vertinama tiksliau.</span>`)+chgSpeedHtml(ex);
+}
+
+/* ---------- gitaros pritaikymas (kalibravimas) ---------- */
+const CAL_STRINGS=[[6,40,"E"],[5,45,"A"],[4,50,"D"],[3,55,"G"],[2,59,"B"],[1,64,"E"]];
+const CAL_CHORDS=["Em","Am","C","G","D","F","Bm"];
+const CAL={active:false,step:null,target:null,got:[],pend:null,floor:[],lastOn:0,noiseAcc:[],msg:"",t0:0};
+function calData(){if(!S.cal)S.cal={strings:{},chords:{}};return S.cal;}
+function calReady(){const c=calData();return c.noise!=null&&Object.keys(c.chords).length>0;}
+function ensureAnalysers(){
+  const a=AC;if(!P.src)return;
+  if(!P.an2){P.an2=a.createAnalyser();P.an2.fftSize=8192;P.an2.smoothingTimeConstant=0;P.src.connect(P.an2);P.fbuf=new Float32Array(P.an2.frequencyBinCount);}
+  if(!P.anLow){const lp1=a.createBiquadFilter(),lp2=a.createBiquadFilter();lp1.type=lp2.type="lowpass";lp1.frequency.value=lp2.frequency.value=900;P.anLow=a.createAnalyser();P.anLow.fftSize=512;P.src.connect(lp1);lp1.connect(lp2);lp2.connect(P.anLow);P.lbuf=new Float32Array(512);}
+}
+function lowRms(){P.anLow.getFloatTimeDomainData(P.lbuf);let r=0;for(let i=0;i<512;i++)r+=P.lbuf[i]*P.lbuf[i];return Math.sqrt(r/512);}
+function fullRms(){P.an.getFloatTimeDomainData(P.buf);let r=0;for(let i=0;i<P.buf.length;i++)r+=P.buf[i]*P.buf[i];return Math.sqrt(r/P.buf.length);}
+async function calStart(step,target){
+  if(CAL.active)calStop();
+  Object.assign(CAL,{step,target,got:[],pend:null,floor:[],lastOn:0,noiseAcc:[],msg:"",t0:performance.now()});
+  const ok=await micOn();if(!ok){renderCal();return;}ensureAnalysers();CAL.active=true;CAL.t0=performance.now();renderCal();
+}
+function calStop(){CAL.active=false;CAL.step=null;CAL.target=null;micOff();P.an2=null;P.anLow=null;}
+function calFrame(){
+  if(!P.anLow)return;const now=performance.now();const low=lowRms();
+  if(CAL.step==="noise"){CAL.noiseAcc.push([fullRms(),low]);if(now-CAL.t0>2500){const f=CAL.noiseAcc.map(x=>x[0]).sort((a,b)=>a-b),l=CAL.noiseAcc.map(x=>x[1]).sort((a,b)=>a-b);const c=calData();c.noise=f[Math.floor(f.length*0.9)];c.noiseLow=l[Math.floor(l.length*0.9)];save();
+    const loud=c.noise>0.02;calStop();CAL.msg=loud?"Aplinkoje gana triukšminga. Matavimai veiks, bet tyliau bus tiksliau.":"Tyla užfiksuota.";renderCal();}return;}
+  const fl=CAL.floor;fl.push(low);if(fl.length>6)fl.shift();const floor=Math.min(...fl);
+  if(CAL.pend){const p=CAL.pend;if(low>p.peak){p.peak=low;p.peakT=now;}const isS=CAL.step==="string";if(isS&&now>=p.t+150){P.an.getFloatTimeDomainData(P.buf);const ff=detectPitch(P.buf,AC.sampleRate);if(ff>0)(p.fs=p.fs||[]).push(ff);if(!p.ch){p.ch=chroma();p.br=brightness();}}if(now>=p.t+(isS?750:160)){CAL.pend=null;calStrum(p);}return;}
+  const thr=Math.max(0.01,(calData().noiseLow||0)*3);
+  if(low>thr&&low>floor*2&&now-CAL.lastOn>350){CAL.lastOn=now;CAL.pend={t:now,peak:low,peakT:now};}
+}
+function calStrum(p){
+  const ch=p.ch||chroma();const br=p.br!=null?p.br:brightness();let f=-1;if(p.fs&&p.fs.length>=3)f=median(p.fs);else{P.an.getFloatTimeDomainData(P.buf);f=detectPitch(P.buf,AC.sampleRate);}
+  const c=calData();
+  if(CAL.step==="string"){
+    const [sn,midi,nm]=CAL_STRINGS.find(x=>x[0]===CAL.target);
+    if(f<0){CAL.msg="Nepavyko išgirsti aiškaus tono. Užgaukite stygą dar kartą ir leiskite skambėti.";renderCal();return;}
+    const x=12*Math.log2(f/440)+69;let cents=Math.round((x-midi)*100);
+    if(Math.abs(cents)>150&&Math.abs(cents-1200)<150)cents-=1200;
+    if(Math.abs(cents)>50){const n=noteFromFreq(f);CAL.msg=`Girdžiu ${n.name}${n.oct}, o ${sn} styga turi būti ${nm}. Jei užgavote tinkamą stygą, ji stipriai išsiderinusi: pasiderinkite derintuvu ir pakartokite.`;renderCal();return;}
+    c.strings[sn]={cents,peak:p.peak,br};save();
+    CAL.msg=Math.abs(cents)<=12?`${sn} styga (${nm}) suderinta ir skamba gerai.`:`${sn} styga (${nm}) ${cents>0?"per aukštai":"per žemai"} ${Math.abs(cents)} centų. Pasiderinkite derintuvu ir pakartokite.`;
+    const nxt=CAL_STRINGS.find(x=>!c.strings[x[0]]);calStop();CAL.msg2=nxt?`Toliau: ${nxt[0]} styga.`:"";renderCal();return;
+  }
+  if(CAL.step==="chord"){
+    if(!ch){CAL.msg="Garsas per tylus. Braukite stipriau arba padėkite telefoną arčiau.";renderCal();return;}
+    const g=judgeGeneric(ch,CAL.target);
+    if(g.pur<0.55||g.miss.length){CAL.msg=g.miss.length?`Neskamba ${g.miss.join(", ")}. Patikrinkite pirštą, spaudžiantį šią natą, ir braukite dar kartą.`:"Akordas skamba neaiškiai. Pabandykite dar kartą, lėtai ir švariai.";renderCal();return;}
+    CAL.got.push({ch:Array.from(ch),peak:p.peak,br,rise:Math.max(0,p.peakT-p.t)/1000});
+    CAL.msg=`Švarus braukimas ${CAL.got.length} iš 3.`;
+    if(CAL.got.length>=3){
+      const G=CAL.got;const simAvg=G.map((x,i)=>G.reduce((a,y,j)=>a+(i===j?0:cosSim(x.ch,y.ch)),0)/2);const pk=G.map(x=>x.peak);const pmed=pk.slice().sort((a,b)=>a-b)[1];
+      const worstS=simAvg.indexOf(Math.min(...simAvg));const worstP=pk.map(x=>Math.abs(Math.log(x/pmed))).reduce((bi,v,i,arr)=>v>arr[bi]?i:bi,0);
+      if(Math.min(...simAvg)<0.9){G.splice(worstS,1);CAL.msg="Vienas braukimas skambėjo kitaip nei kiti, todėl jis atmestas. Perbraukite dar kartą taip pat, kaip ankstesnius.";renderCal();return;}
+      if(Math.max(...pk)/Math.min(...pk)>1.6){G.splice(worstP,1);CAL.msg="Vienas braukimas buvo daug "+(pk[worstP]>pmed?"stipresnis":"silpnesnis")+" už kitus, todėl jis atmestas. Braukite savo įprastu stiprumu.";renderCal();return;}
+      const t=new Array(12).fill(0);CAL.got.forEach(x=>x.ch.forEach((v,i)=>t[i]+=v/3));
+      const avg=k=>CAL.got.reduce((a,x)=>a+x[k],0)/3;c.chords[CAL.target]={t,peak:avg("peak"),br:avg("br"),rise:avg("rise"),d:todayStr()};save();
+      const nm=CAL.target;calStop();CAL.msg=`${nm} įrašytas kaip jūsų etalonas.`;}
+    renderCal();
+  }
+}
+function cosSim(a,b){let d=0,na=0,nb=0;for(let i=0;i<12;i++){d+=a[i]*b[i];na+=a[i]*a[i];nb+=b[i]*b[i];}return na&&nb?d/Math.sqrt(na*nb):0;}
+function renderCal(){
+  const v=document.getElementById("v-cal");if(!v)return;const c=calData();
+  const strs=CAL_STRINGS.map(([sn,m,nm])=>{const r=c.strings[sn];const live=CAL.active&&CAL.step==="string"&&CAL.target===sn;
+    return `<button class="btn small calb ${r?(Math.abs(r.cents)<=12?'okc':'warnc'):''} ${live?'live':''}" data-cals="${sn}">${sn} ${nm}${r?`<small>${r.cents>0?'+':''}${r.cents}¢</small>`:''}</button>`;}).join('');
+  const chs=CAL_CHORDS.map(n=>{const r=c.chords[n];const live=CAL.active&&CAL.step==="chord"&&CAL.target===n;return `<button class="btn small calb ${r?'okc':''} ${live?'live':''}" data-calc="${n}">${n}${r?'<small>✓</small>':''}${live?`<small>${CAL.got.length}/3</small>`:''}</button>`;}).join('');
+  const live=CAL.active?(CAL.step==="noise"?'Matuojama tyla… Nieko negrokite.':CAL.step==="string"?`Užgaukite ${CAL.target} stygą ir leiskite skambėti.`:`Braukite ${CAL.target} akordą švariai, po vieną braukimą. Reikia 3 švarių.`):'';
+  v.innerHTML=`<div class="head"><span class="eyebrow">Gitaros pritaikymas</span><h1>Jūsų gitaros etalonas</h1><p class="muted">Įrašykite, kaip skamba jūsų gitara jūsų kambaryje. Vėliau visi pratimai lyginami su šiais įrašais, todėl matavimai tikslesni. Telefoną padėkite toje vietoje, kur jis bus pratybų metu.</p></div>
+   ${live||CAL.msg?`<div class="note stack" style="gap:6px">${live?`<b>${live}</b>`:''}${CAL.msg?`<span>${esc(CAL.msg)}</span>`:''}${CAL.msg2&&!CAL.active?`<span class="muted">${esc(CAL.msg2)}</span>`:''}${CAL.active?'<button class="btn small" id="calCancel" style="align-self:flex-start">Atšaukti</button>':''}</div>`:''}
+   <div class="theory" style="gap:10px"><h3>1. Tyla ${c.noise!=null?'<span class="pill">atlikta</span>':''}</h3><p class="muted">2,5 s išmatuojamas kambario triukšmas, kad programėlė neklaidintų jo su gitara.</p><button class="btn small" id="calNoise" style="align-self:flex-start">${c.noise!=null?'Matuoti iš naujo':'Matuoti tylą'}</button></div>
+   <div class="theory" style="gap:10px"><h3>2. Atviros stygos</h3><p class="muted">Užgaukite kiekvieną stygą atskirai. Programėlė patikrins derinimą (¢ = centai, iki ±12 yra gerai) ir įsimins garsumą bei tembrą.</p><div class="row" style="justify-content:flex-start">${strs}</div></div>
+   <div class="theory" style="gap:10px"><h3>3. Akordai</h3><p class="muted">Pasirinkite akordą ir 3 kartus švariai perbraukite normaliu stiprumu. Nešvarius braukimus programėlė atmes ir pasakys, kuri nata neskamba. Įrašykite tuos akordus, kuriuos jau mokate. Kitus įrašysite, kai išmoksite.</p><div class="row" style="justify-content:flex-start">${chs}</div></div>
+   <p class="muted" style="font-size:.88rem">Kai gitara įrašyta, akordų keitimai lyginami su jūsų etalonu, o braukimai vertinami kaip „per stiprūs“ arba „per silpni“, lyginant su jūsų normaliu braukimu. Pasikeitus stygoms ar kambariui, verta įrašyti iš naujo.</p>
+   <button class="btn" id="calBack" style="align-self:flex-start">Grįžti</button>`;
+}
+function calClick(t){
+  if(t.id==="calNoise"){calStart("noise",null);return true;}
+  if(t.dataset.cals){CAL.msg2="";calStart("string",+t.dataset.cals);return true;}
+  if(t.dataset.calc){CAL.msg2="";calStart("chord",t.dataset.calc);return true;}
+  if(t.id==="calCancel"){calStop();CAL.msg="";renderCal();return true;}
+  if(t.id==="calOpen"){CAL.msg="";renderCal();show("cal");return true;}
+  if(t.id==="calBack"){if(CAL.active)calStop();show("today");return true;}
+  return false;
+}
+
+function renderAll(){renderToday();renderGoals();renderTheory();renderMetro();if(!P.round)renderEar();renderEarTrain();renderCal();}
 function render(){renderAll();}
 renderAll();
 // refresh at midnight / when returning to the app
