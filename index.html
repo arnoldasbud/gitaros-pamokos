@@ -1307,7 +1307,7 @@ function fgStart(){const pool=fgPoolNotes();if(!pool.length){toast("Pasirinkite 
 function fgNext(){const c=fgCfg();const cells=[];c.strings.forEach(s=>{const seen=new Set();for(let fr=0;fr<=c.maxFret;fr++){const n=NOTES[(STR_MIDI[s]+fr)%12];if((c.notes==="all"||NATURAL.includes(n))&&!seen.has(n)){seen.add(n);cells.push({s,n});}}});let x;do{x=rnd(cells);}while(cells.length>1&&x.n===FG.target&&x.s===FG.tStr);FG.target=x.n;FG.tStr=x.s;FG.t0=performance.now();FG.wrongThis=0;FG.reveal=false;FG.lock=false;FG.flash={};renderEar();}
 function fgPositions(n){const c=fgCfg();const out=[];[FG.tStr].forEach(s=>{for(let fr=0;fr<=c.maxFret;fr++)if(NOTES[(STR_MIDI[s]+fr)%12]===n)out.push(s+":"+fr);});return out;}
 function fgTap(s,fr){
-  if(!FG.active||FG.lock)return;const c=fgCfg();if(!c.strings.includes(s)||fr>c.maxFret)return;
+  if(!FG.active||FG.lock)return;const c=fgCfg();if(s!==FG.tStr||fr>c.maxFret)return;
   const n=NOTES[(STR_MIDI[s]+fr)%12];const k=s+":"+fr;
   if(n===FG.target&&s===FG.tStr){const t=(performance.now()-FG.t0)/1000;const mult=1+Math.min(FG.streak,10)*0.1;const pts=Math.round((100+Math.max(0,100-t*20))*mult);
     FG.score+=pts;FG.streak++;if(!FG.wrongThis)FG.first++;FG.times.push(t);FG.flash={[k]:"good"};FG.lastPts=pts;FG.lock=true;beep(true);FG.i++;renderEar();
@@ -1328,7 +1328,7 @@ function fbHtml(){
   [6,5,4,3,2,1].forEach(s=>h+=`<span class="fbh ${FG.active&&s===FG.tStr?'tcolh':''}">${s}</span>`);
   for(let fr=0;fr<=12;fr++){
     h+=`<span class="fbn">${fr}${[3,5,7,9].includes(fr)?'<i>•</i>':fr===12?'<i>••</i>':''}</span>`;
-    [6,5,4,3,2,1].forEach((s,si)=>{const on=c.strings.includes(s)&&fr<=c.maxFret;const k=s+":"+fr;const n=NOTES[(STR_MIDI[s]+fr)%12];const fl=FG.flash[k]||(pos.includes(k)?"show":"");
+    [6,5,4,3,2,1].forEach((s,si)=>{const on=(FG.active?s===FG.tStr:c.strings.includes(s))&&fr<=c.maxFret;const k=s+":"+fr;const n=NOTES[(STR_MIDI[s]+fr)%12];const fl=FG.flash[k]||(pos.includes(k)?"show":"");
       const lab=(fl||(c.labels&&on))?n:"";const tcol=FG.active&&s===FG.tStr;
       h+=`<button class="fbc ${fr===0?'open':''} ${on?'':'off'} ${tcol?'tcol':''} ${fl}" style="--sw:${(1+ (6-si)*0.35).toFixed(2)}px" data-fs="${s}" data-ff="${fr}" ${on?'':'tabindex="-1" aria-disabled="true"'} aria-label="${s} styga, ${fr} skersinė"><span>${lab}</span></button>`;});
   }
@@ -1341,7 +1341,7 @@ function renderFG(v){
   if(FG.active){
     v.innerHTML=`<div class="fgbar"><div><span class="eyebrow">${FG.i+ (FG.lock?0:1)} / ${c.n}</span><div class="fgt">${FG.target}<span class="fgstr">${FG.tStr} styga</span></div></div>
       <div style="text-align:right"><span class="eyebrow">Taškai</span><div class="mono fgs">${FG.score}</div><span class="mono muted" id="fgClock">0.0 s</span>${FG.streak>1?` <span class="pill">×${(1+Math.min(FG.streak,10)*0.1).toFixed(1)}</span>`:''}</div></div>
-      <p class="muted" style="font-size:.88rem;margin:0">${FG.reveal?`Teisingos vietos pažymėtos. Paspauskite vieną iš jų.`:FG.lastPts<0?'Ne ta vieta. Bandykite dar.':'Paspauskite natą <b>'+FG.target+'</b> '+FG.tStr+' stygoje.'}</p>
+      <p class="muted" style="font-size:.88rem;margin:0">${FG.reveal?`Teisingos vietos pažymėtos. Paspauskite vieną iš jų.`:FG.lastPts<0?'Ne ta nata. Bandykite dar.':'Paspauskite natą <b>'+FG.target+'</b> '+FG.tStr+' stygoje.'}</p>
       ${fbHtml()}
       <div class="row"><button class="btn small" id="fgSkip">Nežinau</button><button class="btn small" id="fgStop">Baigti</button></div>`;
     return;
