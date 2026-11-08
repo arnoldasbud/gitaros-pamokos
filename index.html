@@ -1,0 +1,607 @@
+<!doctype html>
+<html lang="lt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#2B6A4C">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Gitara">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Gitaros pratybos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: one-column phone app, fixed bottom tab bar, four views (Šiandien / Tikslai / Teorija / Metronomas) */
+:root{
+  --bg:#EEF2EF; --surface:#FFFFFF; --line:#D5DDD8; --fg:#16201B; --muted:#58675F;
+  --accent:#2B6A4C; --accent-ink:#FFFFFF; --brass:#9A6F12; --brass-soft:#F4E9CF; --done:#2B6A4C; --warn:#A5461F;
+  --f-display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body:"Atkinson Hyperlegible", system-ui, -apple-system, sans-serif;
+  --f-mono:"JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0E1411; --surface:#17201B; --line:#2A362F; --fg:#E6EDE8; --muted:#94A49B;
+  --accent:#6CC297; --accent-ink:#0E1411; --brass:#E2B54F; --brass-soft:#2E2715; --done:#6CC297; --warn:#F08A5D; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0E1411; --surface:#17201B; --line:#2A362F; --fg:#E6EDE8; --muted:#94A49B;
+  --accent:#6CC297; --accent-ink:#0E1411; --brass:#E2B54F; --brass-soft:#2E2715; --done:#6CC297; --warn:#F08A5D; color-scheme:dark}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:16px;line-height:1.5}
+.wrap{max-width:560px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px calc(96px + env(safe-area-inset-bottom,0px))}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;line-height:1.15}
+h1{font-size:1.65rem;font-weight:700}
+h2{font-size:1.25rem;font-weight:700}
+h3{font-size:1.02rem;font-weight:700}
+p{margin:0}
+.eyebrow{font-size:.72rem;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.stack{display:flex;flex-direction:column;gap:12px}
+.head{display:flex;flex-direction:column;gap:6px;padding-block:4px 14px}
+.muted{color:var(--muted)}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 14px;font-weight:700;min-height:44px}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.small{min-height:36px;padding:6px 12px;font-size:.9rem}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+
+/* fretboard progress strip: 14 frets = 14 days of the stage */
+.fret{display:grid;grid-template-columns:repeat(14,1fr);border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
+.fret span{height:26px;border-right:2px solid var(--line);position:relative}
+.fret span:last-child{border-right:0}
+.fret span.on::after{content:"";position:absolute;inset:0;margin:auto;width:12px;height:12px;border-radius:50%;background:var(--accent)}
+.fret span.today{background:var(--brass-soft)}
+.fret span.inlay::before{content:"";position:absolute;left:50%;bottom:2px;width:3px;height:3px;margin-left:-1.5px;border-radius:50%;background:var(--muted);opacity:.6}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px}
+.stat b{display:block;font-family:var(--f-mono);font-size:1.25rem;font-variant-numeric:tabular-nums}
+.stat small{color:var(--muted);font-size:.78rem}
+
+/* exercises */
+.ex{background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.ex[open]{border-color:var(--accent)}
+.ex summary{list-style:none;display:flex;align-items:center;gap:12px;padding:12px 14px;cursor:pointer}
+.ex summary::-webkit-details-marker{display:none}
+.chk{flex:0 0 26px;height:26px;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center;font-size:.85rem;color:var(--accent-ink)}
+.ex.done .chk{background:var(--done);border-color:var(--done)}
+.ex.done .chk::after{content:"✓";font-weight:700}
+.ex .t{flex:1;min-width:0}
+.ex .t h3{font-size:1rem}
+.ex.done .t h3{color:var(--muted)}
+.ex .min{font-family:var(--f-mono);font-size:.85rem;color:var(--muted);white-space:nowrap}
+.ex .body{padding:0 14px 14px;display:flex;flex-direction:column;gap:12px}
+.timer{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.clock{font-family:var(--f-mono);font-size:2.2rem;font-weight:700;font-variant-numeric:tabular-nums;min-width:5.2ch}
+.clock.run{color:var(--accent)}
+.bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);width:0}
+.pill{display:inline-block;font-size:.75rem;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--brass-soft);color:var(--brass)}
+
+/* goals */
+.goal{display:flex;gap:12px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.goal input{width:22px;height:22px;margin-top:2px;accent-color:var(--accent);flex:0 0 auto}
+.goal label{flex:1;min-width:0}
+.road{display:flex;flex-direction:column;gap:0;border-left:2px solid var(--line);margin-left:8px}
+.road li{list-style:none;position:relative;padding:0 0 14px 18px}
+.road li::before{content:"";position:absolute;left:-7px;top:5px;width:12px;height:12px;border-radius:50%;background:var(--bg);border:2px solid var(--line)}
+.road li.past::before{background:var(--done);border-color:var(--done)}
+.road li.cur::before{background:var(--brass);border-color:var(--brass)}
+.road ul{padding:0;margin:0}
+.note{background:var(--brass-soft);border-radius:10px;padding:12px 14px;font-size:.95rem}
+.confirm{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+/* theory */
+.theory{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px;max-width:65ch}
+.theory code,.theory .k{font-family:var(--f-mono);font-size:.92em;background:var(--bg);padding:1px 5px;border-radius:4px}
+.scale{display:flex;flex-wrap:wrap;gap:4px}
+.scale span{font-family:var(--f-mono);font-size:.85rem;padding:4px 7px;border-radius:6px;border:1px solid var(--line)}
+.scale span.hl{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+details.other{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+details.other summary{cursor:pointer;font-weight:700}
+
+/* metronome */
+.metro{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:16px;align-items:center}
+.bpm{font-family:var(--f-mono);font-size:3.4rem;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.beats{display:flex;gap:10px}
+.beats i{width:18px;height:18px;border-radius:50%;border:2px solid var(--line)}
+.beats i.on{background:var(--accent);border-color:var(--accent)}
+.beats i.on.first{background:var(--brass);border-color:var(--brass)}
+.row{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;align-items:center}
+input[type=range]{width:100%;accent-color:var(--accent)}
+
+/* tab bar */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(5,1fr);padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px);padding-bottom:env(safe-area-inset-bottom,0px);z-index:5}
+nav.tabs button{border:0;background:none;padding:10px 2px 12px;font-size:.72rem;font-weight:700;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:3px}
+nav.tabs button svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8}
+nav.tabs button[aria-selected="true"]{color:var(--accent)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:10px;font-weight:700;z-index:9;max-width:90vw}
+.target{font-family:var(--f-display);font-size:5rem;font-weight:700;line-height:1;transition:transform .2s,color .2s}
+.target.ok{color:var(--done);transform:scale(1.15)}
+.strlabel{font-family:var(--f-display);font-size:1.5rem;font-weight:700;color:var(--brass)}
+.heard{font-weight:700;min-height:1.5em;color:var(--muted)}.heard.good{color:var(--done)}.heard.bad{color:var(--warn)}
+.wrongtag{font-weight:700;color:var(--warn)}
+.hm-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+table.hm{border-collapse:collapse;font-family:var(--f-mono);font-size:.72rem;width:100%;min-width:420px}
+.hm th{color:var(--muted);font-weight:500;padding:4px 2px}
+.hm td{text-align:center;padding:6px 1px;border-left:2px solid var(--line);color:var(--muted)}
+.hm tr.off td{opacity:.35}
+.hm td.good{background:color-mix(in srgb,var(--done) 30%,transparent);color:var(--fg)}
+.hm td.mid{background:color-mix(in srgb,var(--brass) 30%,transparent);color:var(--fg)}
+.hm td.slow{background:color-mix(in srgb,var(--warn) 32%,transparent);color:var(--fg)}
+.lg{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 3px 0 8px;vertical-align:middle}
+.lg.good{background:var(--done)}.lg.mid{background:var(--brass)}.lg.slow{background:var(--warn)}
+table.res{border-collapse:collapse;width:100%;font-size:.9rem}
+.res th{text-align:left;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px 10px}
+.res td{padding:8px 10px;border-top:1px solid var(--line);white-space:nowrap}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<div class="wrap" id="app">
+  <section id="v-today" class="stack"></section>
+  <section id="v-goals" class="stack" hidden></section>
+  <section id="v-theory" class="stack" hidden></section>
+  <section id="v-metro" class="stack" hidden></section>
+  <section id="v-ear" class="stack" hidden></section>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" data-v="today" aria-selected="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg>Šiandien</button>
+  <button role="tab" data-v="goals" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg>Tikslai</button>
+  <button role="tab" data-v="theory" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>Teorija</button>
+  <button role="tab" data-v="metro" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M8 3h8l4 18H4zM12 17l5-11M7 15h10"/></svg>Metronomas</button>
+  <button role="tab" data-v="ear" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M3 6h18M3 10h18M3 14h18M3 18h18M8 4v16M14 4v16"/><circle cx="11" cy="12" r="2" fill="currentColor"/></svg>Grifas</button>
+</nav>
+
+<script>
+"use strict";
+const NOTES=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+function scaleRow(hl){return '<div class="scale">'+NOTES.map(n=>'<span class="'+(hl.includes(n)?'hl':'')+'">'+n+'</span>').join('')+'</div>';}
+
+const PHASES=[
+{title:"Pirštų sugrįžimas ir grifas",
+ focus:"Grąžiname pirštams jėgą ir išmokstame, kur gitaroje yra natos.",
+ theory:`<h3>12 natų</h3><p>Muzikoje yra tik 12 skirtingų garsų. Jie kartojasi vis aukščiau (oktavomis):</p>${scaleRow(["C","D","E","F","G","A","B"])}
+ <p>Atstumas tarp dviejų gretimų garsų yra <b>pustonis</b>. Du pustoniai yra <b>tonas</b>. Tarp <span class="k">E–F</span> ir <span class="k">B–C</span> nėra diezo, ten tik pustonis.</p>
+ <h3>Gitaroje</h3><p>Viena skersinė (ladas) = vienas pustonis. Atviros stygos nuo storiausios: <span class="k">E A D G B E</span>. 12-oje skersinėje natos pradeda kartotis iš naujo.</p>
+ <p>Pavyzdys 6 stygoje: 0 E, 1 F, 3 G, 5 A, 7 B, 8 C, 10 D, 12 E.</p>
+ <h3>Ritmas</h3><p>Groti pagal metronomą reiškia vieną smūgį ar natą vienam tvaksniui. Skaičiuokite garsiai: <span class="k">1 2 3 4</span>.</p>
+ <p class="muted">Pirmomis dienomis pirštų galiukai skaudės, tai normalu. Geriau 2 trumpos sesijos per dieną nei viena ilga.</p>`,
+ ex:[
+  {id:"warm",n:"Apšilimas",m:2,h:"Pagniaužykite kumštį, patempkite pirštus atgal, pakratykite riešus. Pečiai atpalaiduoti."},
+  {id:"chrom",n:"Chromatinis 1-2-3-4",m:5,bpm:60,h:"Kiekvienoje stygoje paspauskite 1, 2, 3, 4 skersines 1, 2, 3, 4 pirštais, nuo 6 stygos iki 1 ir atgal. Viena nata vienam tvaksniui. Pirštai arti stygų, spausti tik tiek, kad skambėtų švariai."},
+  {id:"notes65",n:"Natos 6 ir 5 stygoje",m:4,h:"Pasirinkite natą (pvz., G), suraskite ją 6 stygoje, tada 5 stygoje. Sakykite pavadinimą garsiai. Kitą dieną kitos natos. Pradėkite nuo C, G, D, A, F."},
+  {id:"emam",n:"Akordai Em ir Am",m:5,bpm:60,h:"Išmokite pirštuotę. Tada grokite po 4 smūgius žemyn kiekvienam akordui pagal metronomą. Pirmiausia tikrinkite, ar skamba visos stygos."},
+  {id:"min1",n:"Vienos minutės keitimai",m:1,h:"Per minutę keiskite Em ↔ Am kuo daugiau kartų (švariai). Suskaičiuokite ir užsirašykite. Tai jūsų tikslo matas."}
+ ],
+ goals:["Chromatinis pratimas visose stygose švariai 60 bpm","Bet kurią natą 6 ir 5 stygoje randu per 3 sekundes","Em ↔ Am: 30 keitimų per minutę","Galiu paaiškinti, kas yra pustonis ir tonas, ir kur nėra diezų"]},
+
+{title:"Majorinė gama ir atviri akordai",
+ focus:"Suprantame, kaip sudaroma gama, ir išmokstame pagrindinius akordus.",
+ theory:`<h3>Gama yra formulė</h3><p><b>Majorinė gama</b> sudaroma pagal žingsnius: <span class="k">T T P T T T P</span> (T tonas, P pustonis).</p>
+ <p>Nuo C gaunasi C D E F G A B C, be jokių diezų:</p>${scaleRow(["C","D","E","F","G","A","B"])}
+ <p>Nuo G: G A B C D E <b>F#</b> G. Formulė priverčia F pakelti į F#.</p>${scaleRow(["G","A","B","C","D","E","F#"])}
+ <h3>Laipsniai</h3><p>Gamos natos numeruojamos 1–7. C majore 1 = C, 3 = E, 5 = G. Šie numeriai bus raktas į akordus kitame etape.</p>
+ <h3>Ritmas</h3><p>Aštuntinės: du smūgiai vienam tvaksniui. Skaičiuokite <span class="k">1 ir 2 ir 3 ir 4 ir</span>: ant skaičių žemyn, ant „ir“ aukštyn.</p>`,
+ ex:[
+  {id:"warm",n:"Apšilimas",m:2,h:"Kaip ir anksčiau, plius 1 ratas chromatinio pratimo be metronomo."},
+  {id:"chrom",n:"Chromatinis 1-2-3-4",m:3,bpm:70,h:"Dabar 70 bpm. Jei švaru, pabandykite aštuntinėmis 50 bpm."},
+  {id:"scale1",n:"C majoras vienoje stygoje",m:4,h:"2 (B) styga: pradėkite nuo 1 skersinės (C) ir eikite pagal T T P T T T P iki 13 skersinės. Sakykite natų pavadinimus."},
+  {id:"scaleopen",n:"C majoras pirmoje pozicijoje",m:4,bpm:60,h:"5 st. 3 sk. (C), 4 st. 0, 2, 3 (D E F), 3 st. 0, 2 (G A), 2 st. 0, 1 (B C). Aukštyn ir žemyn, viena nata vienam tvaksniui."},
+  {id:"cgd",n:"Akordai C, G, D",m:5,bpm:70,h:"Keitimai G ↔ C, C ↔ D, G ↔ D. Ritmas aštuntinėmis žemyn-aukštyn. Atlikite ir vienos minutės keitimų testą G ↔ C."},
+  {id:"prog1",n:"Progresija G–C–D–Em",m:4,bpm:70,h:"Po vieną taktą (4 tvaksniai) kiekvienam akordui. Nesustokite, net jei suklystate. Ritmas svarbiau už tobulą akordą."}
+ ],
+ goals:["C majoro gamą groju aukštyn ir žemyn 70 bpm be klaidų","Pagal T T P T T T P galiu užrašyti D ir A majoro gamų natas","G ↔ C: 30 keitimų per minutę","Progresiją G–C–D–Em groju aštuntinėmis 70 bpm nesustodamas"]},
+
+{title:"Intervalai ir kaip gimsta akordai",
+ focus:"Suprantame, iš ko sudarytas akordas, ir kodėl dainose kartojasi tie patys akordai.",
+ theory:`<h3>Intervalai</h3><p>Intervalas yra atstumas tarp dviejų natų pustoniais: <b>mažoji tercija</b> 3, <b>didžioji tercija</b> 4, <b>grynoji kvinta</b> 7, <b>oktava</b> 12.</p>
+ <h3>Trigarsis = 1, 3, 5</h3><p>Akordas yra gamos 1, 3 ir 5 natos. <b>Majorinis</b>: didžioji tercija + mažoji (C E G). <b>Minorinis</b>: mažoji + didžioji (A C E). Majoras skamba šviesiai, minoras liūdniau.</p>${scaleRow(["C","E","G"])}
+ <h3>Tonacijos akordai</h3><p>Ant kiekvienos gamos natos statome trigarsį, naudodami tik gamos natas. C majore gaunasi:</p>
+ <p><span class="k">I C · ii Dm · iii Em · IV F · V G · vi Am · vii° Bdim</span></p>
+ <p>Labai daug populiarių dainų naudoja <b>I–V–vi–IV</b>: C majore tai C–G–Am–F, G majore G–D–Em–C.</p>
+ <h3>Ritmas</h3><p>Populiarus piešinys: <span class="k">Ž Ž A A Ž A</span> (Ž žemyn, A aukštyn), skaičiuojant <span class="k">1 2 ir (3) ir 4 ir</span>.</p>`,
+ ex:[
+  {id:"warm",n:"Apšilimas",m:2,h:"Chromatinis ratas ir pirštų tempimas."},
+  {id:"intv",n:"Intervalai ant grifo",m:4,h:"Nuo bet kurios natos 6 stygoje: didžioji tercija yra 4 skersinės aukščiau, mažoji 3. Kvinta: ta pati nata +2 skersinės 5 stygoje (galios akordo forma). Klausykite, kuo skiriasi tercijos."},
+  {id:"chordnotes",n:"Akordų natos",m:3,h:"Grokite C, G, Am akordus po vieną stygą ir pasakykite, kuri nata yra 1, kuri 3, kuri 5."},
+  {id:"fsmall",n:"Mažasis F",m:4,h:"F be pilnos barės: 1 pirštas spaudžia 1 ir 2 stygas ties 1 skersine, 2 pirštas 3 st. 2 sk., 3 pirštas 4 st. 3 sk. Grokite tik 4 plonąsias stygas."},
+  {id:"pop",n:"I–V–vi–IV",m:5,bpm:80,h:"C–G–Am–F, tada G–D–Em–C. Ritmas Ž Ž A A Ž A. Pabandykite padainuoti bet kokią žinomą dainą ant šios progresijos."},
+  {id:"scale",n:"C majoro gama",m:2,bpm:80,h:"Pirmoje pozicijoje, aštuntinėmis 60 bpm arba ketvirtinėmis 80 bpm."}
+ ],
+ goals:["Galiu pasakyti C, G, D, Am, Em akordų natas ir paaiškinti 1–3–5","Žinau visus 7 C ir G tonacijų akordus","Mažasis F skamba švariai","I–V–vi–IV groju C ir G tonacijose 80 bpm su ritmu Ž Ž A A Ž A"]},
+
+{title:"Pentatonika, bliuzas ir paralelinės tonacijos",
+ focus:"Pirmoji improvizacija ir supratimas, kaip susijusios tonacijos.",
+ theory:`<h3>Minorinė pentatonika</h3><p>Penkių natų gama: <span class="k">1 ♭3 4 5 ♭7</span>. A minoro pentatonika: A C D E G.</p>${scaleRow(["A","C","D","E","G"])}
+ <p>Ji „neturi blogų natų“ virš minorinių akordų, todėl puikiai tinka pradėti improvizuoti.</p>
+ <h3>Paralelinės tonacijos</h3><p>Am ir C majoras turi tas pačias natas. Am yra C majoro vi laipsnis. Kiekviena majoro tonacija turi savo paralelinį minorą (G ir Em, D ir Bm).</p>
+ <h3>Kvintų ratas</h3><p><span class="k">C → G → D → A → E → B</span>: kiekvienas žingsnis kvinta aukštyn prideda vieną diezą. Akordeono kairės rankos bosai išdėstyti būtent pagal šį ratą.</p>
+ <h3>12 taktų bliuzas</h3><p><span class="k">I I I I | IV IV I I | V IV I V</span>. A tonacijoje: A, D, E.</p>`,
+ ex:[
+  {id:"warm",n:"Apšilimas",m:2,h:"Chromatinis pratimas 80 bpm."},
+  {id:"penta",n:"Am pentatonika (5 sk.)",m:5,bpm:70,h:"Pirmoji „dėžutė“: kiekvienoje stygoje 5 ir 8 skersinės, išskyrus 3 ir 2 stygas (5–7 ir 5–8). Aukštyn ir žemyn aštuntinėmis. 1 pirštas visada 5 skersinėje."},
+  {id:"blues",n:"12 taktų bliuzas A",m:5,bpm:80,h:"Galios akordas su „shuffle“ judesiu: A5 ↔ A6 nuo 5 stygos, D5 ↔ D6 nuo 4 stygos, E5 ↔ E6 nuo 6 stygos. Sekite schemą I I I I | IV IV I I | V IV I V."},
+  {id:"impro",n:"Improvizacija",m:5,h:"Įsijunkite „A minor backing track“ (YouTube) arba įsirašykite Am–G–F. Naudokite tik 3–4 pentatonikos natas ir kartokite trumpas frazes. Mažiau natų yra geriau."},
+  {id:"review",n:"Akordų ratas",m:3,h:"Visi išmokti akordai po 2 kartus, keičiant tvarką."}
+ ],
+ goals:["Am pentatoniką groju aštuntinėmis 80 bpm","12 taktų bliuzą A tonacijoje groju nesustodamas","Galiu paaiškinti, kodėl Am ir C turi tas pačias natas","Žinau kvintų ratą C–G–D–A–E ir kiek kiekviena tonacija turi diezų"]},
+
+{title:"Barė akordai ir septakordai",
+ focus:"Viena forma, kurią galima stumti po grifą: atveriame visas tonacijas.",
+ theory:`<h3>Barė</h3><p>Barė akordas yra atviro akordo forma, kurią 1 pirštas „perkelia“ aukščiau. Pavadinimą lemia šaknies nata, todėl čia labai praverčia 1 etapo natų žinios.</p>
+ <p><b>E forma</b>: šaknis 6 stygoje. 1 sk. F, 3 sk. G, 5 sk. A.<br><b>A forma</b>: šaknis 5 stygoje. 2 sk. Bm, 3 sk. Cm, 5 sk. Dm.</p>
+ <h3>Septakordai</h3><p>Prie trigarsio pridedame 7-ą laipsnį:</p>
+ <p><span class="k">G7 = G B D F</span> (dominantinis, „traukia“ į C)<br><span class="k">Cmaj7 = C E G B</span> (švelnus, džiazinis)<br><span class="k">Am7 = A C E G</span> (minkštas minoras)</p>`,
+ ex:[
+  {id:"warm",n:"Apšilimas",m:3,h:"Barė vargina ranką: ilgesnis apšilimas ir pertraukėlės tarp pratimų."},
+  {id:"fbarre",n:"F barė (E forma)",m:5,h:"Paspauskite, sugrokite po vieną stygą, atleiskite ranką. Kartokite. Nykštis už grifo vidurio, 1 pirštas šiek tiek ant šono. Spaudžia ne pirštas, o rankos svoris."},
+  {id:"bmbarre",n:"Bm barė (A forma)",m:4,h:"1 pirštas 2 sk. per 5–1 stygas, 3 ir 4 pirštai 4 sk., 2 pirštas 2 st. 3 sk."},
+  {id:"move",n:"Barės stumdymas",m:4,bpm:60,h:"F–G–A (E forma) ir Bm–Cm–Dm (A forma). Prieš kiekvieną akordą garsiai pasakykite šaknies natą."},
+  {id:"sev",n:"Septakordai",m:4,h:"G7 → C, E7 → Am, D7 → G. Tada C → Cmaj7 → Am7. Klausykite, kaip keičiasi „spalva“."}
+ ],
+ goals:["F ir Bm barė: skamba visos stygos","Bet kurį barė akordą randu pagal šaknį 6 arba 5 stygoje","Groju dainą su bent vienu barė akordu","Žinau, kuo skiriasi 7, maj7 ir m7 akordai"]},
+
+{title:"Klausa, transpozicija ir savarankiškumas",
+ focus:"Išmokstame dainas patys ir laisvai perkeliame jas į kitas tonacijas.",
+ theory:`<h3>Transpozicija</h3><p>Progresiją rašykite laipsniais, ne akordų vardais. Tada ji tinka bet kuriai tonacijai: I–V–vi–IV C majore C–G–Am–F, D majore D–A–Bm–G.</p>
+ <h3>Kapodastras</h3><p>Kapodastras pakelia visas stygas tiek pustonių, kiek skersinių. G forma su kapodastru 2 skersinėje skamba kaip A.</p>
+ <h3>Klausa</h3><p>Tonaciją dažnai išduoda paskutinis dainos akordas ir pagrindinė boso nata. Dauguma dainų laikosi I, IV, V ir vi akordų.</p>
+ <h3>Akordeonui</h3><p>Viskas, ką išmokote, tinka ir akordeonui: gamos, intervalai, trigarsiai, laipsniai ir kvintų ratas. Skiriasi tik klaviatūra.</p>`,
+ ex:[
+  {id:"warm",n:"Apšilimas",m:2,h:"Chromatinis pratimas 90 bpm."},
+  {id:"transp",n:"Transpozicija",m:4,h:"Paimkite dainą iš ankstesnių etapų ir sugrokite ją dar 2 tonacijose. Pirmiausia užsirašykite laipsnius."},
+  {id:"ear",n:"Daina iš klausos",m:6,h:"Pasirinkite paprastą dainą. Raskite pagrindinę boso natą, tada išbandykite tos tonacijos I, IV, V, vi akordus."},
+  {id:"scale2",n:"Majoro gama 2 pozicijose",m:4,bpm:80,h:"G majoras nuo 6 st. 3 sk. ir C majoras nuo 5 st. 3 sk., 2 oktavos."},
+  {id:"rhythm",n:"Ritmo įvairovė",m:4,bpm:70,h:"Šešioliktinės, sinkopės ir duslinimas delnu (palm mute) ant tų pačių akordų."}
+ ],
+ goals:["Bet kurią progresiją transponuoju pagal laipsnius","Bent vieną dainą išmokau iš klausos","Žinau, kaip kapodastras keičia tonaciją","3 dainas groju nuo pradžios iki galo"]}
+];
+
+const EAR_MAP={"0:notes65":1};
+/* ---------- state ---------- */
+const KEY="gitara-pratybos-v1";
+function todayStr(d){d=d||new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+function daysBetween(a,b){const pa=a.split("-").map(Number),pb=b.split("-").map(Number);return Math.round((Date.UTC(pb[0],pb[1]-1,pb[2])-Date.UTC(pa[0],pa[1]-1,pa[2]))/864e5);}
+function fresh(){return {phase:0,phaseStart:todayStr(),goals:{},log:{},done:{},updatedAt:0};}
+let S=fresh();
+try{const raw=localStorage.getItem(KEY);if(raw)S=Object.assign(fresh(),JSON.parse(raw));}catch(e){}
+
+let dbRef=null,saveTimer=null;
+function save(){
+  S.updatedAt=Date.now();
+  try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}
+  if(dbRef){clearTimeout(saveTimer);saveTimer=setTimeout(()=>{dbRef.set(JSON.parse(JSON.stringify(S))).catch(()=>{});},800);}
+}
+(async()=>{
+  try{
+    if(!window.claude||!window.claude.use)return;
+    const [db,user]=await Promise.all([claude.use("db"),claude.use("user")]);
+    if(!db||!user)return;
+    const uid=await user.id(); if(!uid)return;
+    dbRef=db.doc("data/users/"+uid+"/progress");
+    const snap=await dbRef.get();
+    if(snap.exists){const d=snap.data()||{};if((d.updatedAt||0)>(S.updatedAt||0)){S=Object.assign(fresh(),d);try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}render();}else if((S.updatedAt||0)>(d.updatedAt||0)){dbRef.set(JSON.parse(JSON.stringify(S))).catch(()=>{});}}
+    else if(S.updatedAt){dbRef.set(JSON.parse(JSON.stringify(S))).catch(()=>{});}
+  }catch(e){}
+})();
+
+function doneToday(){const t=todayStr();return (S.done[t]||[]);}
+function secsToday(){return S.log[todayStr()]||0;}
+function addSecs(s){if(s<=0)return;const t=todayStr();S.log[t]=(S.log[t]||0)+Math.round(s);}
+function markDone(id,on){const t=todayStr();const a=new Set(S.done[t]||[]);on?a.add(id):a.delete(id);S.done[t]=[...a];}
+function streak(){let n=0;const d=new Date();if(!S.log[todayStr(d)])d.setDate(d.getDate()-1);while(S.log[todayStr(d)]>=60){n++;d.setDate(d.getDate()-1);}return n;}
+function phaseGoals(){return S.goals[S.phase]||[];}
+
+/* ---------- audio ---------- */
+let AC=null;
+let unlocked=false;
+function silentWav(){const n=800,b=new Uint8Array(44+n*2),v=new DataView(b.buffer);const w=(o,s)=>{for(let i=0;i<s.length;i++)b[o+i]=s.charCodeAt(i);};w(0,"RIFF");v.setUint32(4,36+n*2,true);w(8,"WAVE");w(12,"fmt ");v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,8000,true);v.setUint32(28,16000,true);v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,"data");v.setUint32(40,n*2,true);let s="";b.forEach(x=>s+=String.fromCharCode(x));return "data:audio/wav;base64,"+btoa(s);}
+function unlock(){if(unlocked)return;unlocked=true;try{if(navigator.audioSession)navigator.audioSession.type="playback";}catch(e){}try{const a=new Audio(silentWav());a.loop=true;a.setAttribute("playsinline","");a.volume=0.01;a.play().catch(()=>{});}catch(e){}}
+function ac(){unlock();if(!AC){const C=window.AudioContext||window.webkitAudioContext;if(C)AC=new C();}if(AC&&AC.state==="suspended")AC.resume();if(AC&&!ac.primed){ac.primed=true;try{const o=AC.createOscillator(),g=AC.createGain();g.gain.value=0.0001;o.connect(g).connect(AC.destination);o.start();o.stop(AC.currentTime+0.02);}catch(e){}}return AC;}
+function click(time,accent){const a=ac();if(!a)return;const o=a.createOscillator(),g=a.createGain();o.type="square";o.frequency.value=accent?1760:1175;g.gain.setValueAtTime(0.0001,time);g.gain.exponentialRampToValueAtTime(accent?0.6:0.4,time+0.002);g.gain.exponentialRampToValueAtTime(0.0001,time+0.05);o.connect(g).connect(a.destination);o.start(time);o.stop(time+0.06);}
+function chime(){const a=ac();if(!a)return;const t=a.currentTime;[659.25,783.99,987.77].forEach((f,i)=>{const o=a.createOscillator(),g=a.createGain();o.type="triangle";o.frequency.value=f;g.gain.setValueAtTime(0.0001,t+i*0.18);g.gain.exponentialRampToValueAtTime(0.4,t+i*0.18+0.01);g.gain.exponentialRampToValueAtTime(0.0001,t+i*0.18+0.6);o.connect(g).connect(a.destination);o.start(t+i*0.18);o.stop(t+i*0.18+0.65);});}
+
+let wake=null;
+async function wakeOn(){try{if(navigator.wakeLock&&!wake){wake=await navigator.wakeLock.request("screen");wake.addEventListener("release",()=>{wake=null;});}}catch(e){}}
+function wakeOff(){if(!T.running&&!M.running&&!(typeof P!=="undefined"&&P.on)&&wake){wake.release().catch(()=>{});wake=null;}}
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&(T.running||M.running))wakeOn();});
+
+/* ---------- timer ---------- */
+const T={id:null,total:0,left:0,running:false,last:0,iv:null,spent:0};
+function fmt(s){s=Math.max(0,Math.ceil(s));return String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+function timerFor(ex){if(T.id!==ex.id){if(T.running)pauseT();T.id=ex.id;T.total=ex.m*60;T.left=T.total;T.spent=0;}}
+function startT(ex){ac();timerFor(ex);if(T.left<=0)T.left=T.total;if(ex.bpm&&S.metroWithTimer!==false){setBpm(ex.bpm);if(!M.running){startM();M.byTimer=true;}}T.running=true;T.last=performance.now();clearInterval(T.iv);T.iv=setInterval(tick,250);wakeOn();paintTimer();}
+function stopTimerMetro(){if(M.byTimer){M.byTimer=false;stopM();}}
+function pauseT(){if(!T.running)return;tick();T.running=false;clearInterval(T.iv);stopTimerMetro();flushSpent();wakeOff();paintTimer();}
+function resetT(ex){pauseT();T.id=ex.id;T.total=ex.m*60;T.left=T.total;T.spent=0;paintTimer();}
+function flushSpent(){if(T.spent>0){addSecs(T.spent);T.spent=0;save();paintStats();}}
+function tick(){if(!T.running)return;const now=performance.now();const dt=(now-T.last)/1000;T.last=now;T.left-=dt;T.spent+=dt;
+  if(T.left<=0){T.left=0;T.running=false;clearInterval(T.iv);stopTimerMetro();flushSpent();markDone(T.id,true);save();chime();toast("Laikas baigėsi. Pratimas atliktas!");wakeOff();renderToday();return;}
+  paintTimer();}
+function paintTimer(){document.querySelectorAll("[data-clock]").forEach(el=>{const id=el.dataset.clock;const ex=curEx().find(e=>e.id===id);if(!ex)return;const tot=ex.m*60;const left=T.id===id?T.left:tot;el.textContent=fmt(left);el.classList.toggle("run",T.id===id&&T.running);const bar=document.querySelector('[data-bar="'+id+'"]');if(bar)bar.style.width=((1-left/tot)*100)+"%";const b=document.querySelector('[data-start="'+id+'"]');if(b)b.textContent=(T.id===id&&T.running)?"Pauzė":(T.id===id&&left<tot&&left>0?"Tęsti":"Pradėti");});}
+
+function curEx(){return PHASES[S.phase].ex;}
+function toast(m){const t=document.getElementById("toast");t.textContent=m;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>{t.hidden=true;},2600);}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+
+/* ---------- views ---------- */
+function stageHeader(){
+  const p=PHASES[S.phase];const day=Math.min(14,daysBetween(S.phaseStart,todayStr())+1);
+  return `<div class="head"><span class="eyebrow">${S.phase+1} etapas iš ${PHASES.length} · ${day}-a diena iš 14</span><h1>${esc(p.title)}</h1><p class="muted">${esc(p.focus)}</p></div>`;
+}
+function fretStrip(){
+  let h='<div class="fret" aria-label="14 etapo dienų">';
+  for(let i=0;i<14;i++){const d=new Date(S.phaseStart+"T12:00:00");d.setDate(d.getDate()+i);const k=todayStr(d);const on=(S.log[k]||0)>=60;const inl=[2,4,6,8,11].includes(i);h+=`<span class="${on?'on ':''}${k===todayStr()?'today ':''}${inl?'inlay':''}" title="${k}"></span>`;}
+  return h+'</div>';
+}
+function statsHtml(){
+  const plan=curEx().reduce((a,e)=>a+e.m,0);const g=phaseGoals().filter(Boolean).length;
+  return `<div class="stats" id="stats"><div class="stat"><b>${Math.floor(secsToday()/60)}/${plan}</b><small>min šiandien</small></div><div class="stat"><b>${streak()}</b><small>dienų iš eilės</small></div><div class="stat"><b>${g}/${PHASES[S.phase].goals.length}</b><small>tikslų pasiekta</small></div></div>`;
+}
+function paintStats(){const el=document.getElementById("stats");if(el)el.outerHTML=statsHtml();}
+
+function renderToday(){
+  const v=document.getElementById("v-today");const dn=doneToday();const open=v.querySelector("details[open]");const openId=open?open.dataset.id:null;
+  let h=stageHeader()+fretStrip()+statsHtml()+'<h2 style="margin-top:8px">Šiandienos pratimai</h2>';
+  curEx().forEach(ex=>{
+    const d=dn.includes(ex.id);
+    h+=`<details class="ex ${d?'done':''}" data-id="${ex.id}" ${openId===ex.id?'open':''}>
+      <summary><span class="chk" aria-hidden="true"></span><span class="t"><h3>${esc(ex.n)}</h3>${ex.bpm?`<span class="pill">${ex.bpm} bpm</span>`:''}</span><span class="min">${ex.m} min</span></summary>
+      <div class="body"><p>${esc(ex.h)}</p>
+        <div class="timer"><span class="clock" data-clock="${ex.id}">${fmt(ex.m*60)}</span>
+          <button class="btn primary" data-start="${ex.id}">Pradėti</button>
+          <button class="btn small" data-reset="${ex.id}">Iš naujo</button></div>
+        <div class="bar"><i data-bar="${ex.id}"></i></div>
+        <div class="row" style="justify-content:flex-start">
+          ${ex.bpm?`<button class="btn small" data-mwt="1" aria-pressed="${S.metroWithTimer!==false}">Metronomas su laikmačiu: ${S.metroWithTimer!==false?'įjungtas':'išjungtas'}</button><button class="btn small" data-metro="${ex.bpm}">Atidaryti metronomą</button>`:''}
+          ${EAR_MAP[S.phase+":"+ex.id]?`<button class="btn small" data-ear="1">Natų treniruoklis su mikrofonu</button>`:''}
+          <button class="btn small" data-toggle="${ex.id}">${d?'Pažymėti neatliktu':'Pažymėti atliktu'}</button></div>
+      </div></details>`;
+  });
+  const all=curEx().every(e=>dn.includes(e.id));
+  if(all)h+=`<div class="note"><b>Šiandienos sesija baigta.</b> Pažiūrėkite į <b>Tikslai</b> skiltį ir pažymėkite, ką jau pasiekėte.</div>`;
+  v.innerHTML=h;paintTimer();
+}
+
+let confirmNext=false;
+function renderGoals(){
+  const v=document.getElementById("v-goals");const p=PHASES[S.phase];const g=phaseGoals();const day=daysBetween(S.phaseStart,todayStr())+1;
+  const all=p.goals.every((_,i)=>g[i]);const last=S.phase===PHASES.length-1;
+  let h=`<div class="head"><span class="eyebrow">${S.phase+1} etapo tikslai</span><h1>Ką turiu mokėti</h1><p class="muted">Pažymėkite tikslą tik tada, kai jį pasiekiate 3 dienas iš eilės. Kai pasieksite visus, atsivers kitas etapas. Jei prireiks daugiau nei 2 savaičių, tai visiškai normalu.</p></div>`;
+  p.goals.forEach((t,i)=>{h+=`<div class="goal"><input type="checkbox" id="g${S.phase}_${i}" data-goal="${i}" ${g[i]?'checked':''}><label for="g${S.phase}_${i}">${esc(t)}</label></div>`;});
+  if(!last){
+    if(all)h+=`<button class="btn primary" id="next">Pereiti į ${S.phase+2} etapą: ${esc(PHASES[S.phase+1].title)}</button>`;
+    else if(day>14)h+=`<div class="note">Praėjo ${day-1} dienos. Tęskite tuos pačius pratimus, kol pasieksite visus tikslus. Tvirtas pagrindas sutaupys laiko vėliau.</div>`;
+    if(!all){h+= confirmNext?`<div class="note confirm"><span>Tikrai pereiti, nors ne visi tikslai pasiekti?</span><button class="btn small primary" id="nextForce">Taip, pereiti</button><button class="btn small" id="nextCancel">Ne</button></div>`:`<button class="btn small" id="nextAsk" style="align-self:flex-start">Pereiti anksčiau</button>`;}
+  }else if(all){h+=`<div class="note"><b>Visi etapai baigti!</b> Jūs pasiekėte vidutinį lygį. Ta pati teorija tiks akordeonui.</div>`;}
+  h+='<h2 style="margin-top:12px">Visas kelias</h2><ul class="road">';
+  PHASES.forEach((ph,i)=>{h+=`<li class="${i<S.phase?'past':i===S.phase?'cur':''}"><span class="eyebrow">${i*2+1}–${i*2+2} savaitė</span><h3>${esc(ph.title)}</h3><p class="muted" style="font-size:.92rem">${esc(ph.focus)}</p></li>`;});
+  h+='</ul>';
+  if(S.phase>0)h+=`<button class="btn small" id="prev" style="align-self:flex-start">Grįžti į ${S.phase} etapą</button>`;
+  v.innerHTML=h;
+}
+function goPhase(n){S.phase=n;S.phaseStart=todayStr();confirmNext=false;if(T.running)pauseT();T.id=null;save();renderAll();toast((n+1)+" etapas: "+PHASES[n].title);}
+
+function renderTheory(){
+  const v=document.getElementById("v-theory");const p=PHASES[S.phase];
+  let h=`<div class="head"><span class="eyebrow">${S.phase+1} etapo teorija</span><h1>${esc(p.title)}</h1></div><article class="theory">${p.theory}</article>`;
+  if(S.phase>0){h+='<h2 style="margin-top:8px">Ankstesni etapai</h2>';for(let i=S.phase-1;i>=0;i--){h+=`<details class="other"><summary>${i+1}. ${esc(PHASES[i].title)}</summary><div class="theory" style="border:0;padding:12px 0 0">${PHASES[i].theory}</div></details>`;}}
+  v.innerHTML=h;
+}
+
+/* ---------- metronome ---------- */
+const M={bpm:60,running:false,beat:0,next:0,iv:null,per:4};
+function renderMetro(){
+  const v=document.getElementById("v-metro");
+  v.innerHTML=`<div class="head"><span class="eyebrow">Metronomas</span><h1>Tempas</h1><p class="muted">Pradėkite lėtai. Tempą kelkite po 5 bpm tik tada, kai 3 kartus iš eilės grojate švariai.</p></div>
+  <div class="metro"><div class="bpm" id="bpmv">${M.bpm}</div><span class="muted">tvaksnių per minutę</span>
+   <div class="beats" id="beats">${Array.from({length:M.per},(_,i)=>`<i class="${i===0?'first':''}"></i>`).join('')}</div>
+   <input type="range" id="bpmr" min="40" max="200" step="1" value="${M.bpm}" aria-label="Tempas">
+   <div class="row"><button class="btn" data-d="-5">−5</button><button class="btn" data-d="-1">−1</button><button class="btn primary" id="mgo" style="min-width:110px">${M.running?'Stop':'Pradėti'}</button><button class="btn" data-d="1">+1</button><button class="btn" data-d="5">+5</button></div>
+   <div class="row"><span class="muted">Taktas:</span>${[2,3,4].map(n=>`<button class="btn small" data-per="${n}" aria-pressed="${M.per===n}" style="${M.per===n?'border-color:var(--accent);color:var(--accent)':''}">${n}/4</button>`).join('')}</div>
+  </div>`;
+}
+function setBpm(b){M.bpm=Math.max(40,Math.min(200,b));const a=document.getElementById("bpmv");if(a)a.textContent=M.bpm;const r=document.getElementById("bpmr");if(r)r.value=M.bpm;}
+function sched(){const a=AC;while(M.next<a.currentTime+0.12){const b=M.beat;click(M.next,b===0);const delay=Math.max(0,(M.next-a.currentTime)*1000);setTimeout(()=>{const dots=document.querySelectorAll("#beats i");dots.forEach((d,i)=>d.classList.toggle("on",i===b));},delay);M.next+=60/M.bpm;M.beat=(M.beat+1)%M.per;}}
+function startM(){const a=ac();if(!a){toast("Šis įrenginys negroja garso.");return;}M.running=true;M.beat=0;M.next=a.currentTime+0.06;clearInterval(M.iv);M.iv=setInterval(sched,25);wakeOn();const g=document.getElementById("mgo");if(g)g.textContent="Stop";}
+function stopM(){M.running=false;M.byTimer=false;clearInterval(M.iv);document.querySelectorAll("#beats i").forEach(d=>d.classList.remove("on"));wakeOff();const g=document.getElementById("mgo");if(g)g.textContent="Pradėti";}
+
+/* ---------- wiring ---------- */
+function show(v){document.querySelectorAll("nav.tabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.v===v));["today","goals","theory","metro","ear"].forEach(k=>document.getElementById("v-"+k).hidden=k!==v);if(v!=="ear"&&(P.on||P.round))stopRound();window.scrollTo(0,0);}
+document.querySelector("nav.tabs").addEventListener("click",e=>{const b=e.target.closest("button");if(b)show(b.dataset.v);});
+document.getElementById("app").addEventListener("click",e=>{
+  const t=e.target.closest("button");if(!t)return;
+  const ex=id=>curEx().find(x=>x.id===id);
+  if(t.dataset.start){const x=ex(t.dataset.start);(T.id===x.id&&T.running)?pauseT():startT(x);}
+  else if(t.dataset.reset){resetT(ex(t.dataset.reset));}
+  else if(t.dataset.toggle){const id=t.dataset.toggle;markDone(id,!doneToday().includes(id));save();renderToday();}
+  else if(t.dataset.mwt){S.metroWithTimer=(S.metroWithTimer===false);if(!S.metroWithTimer)stopTimerMetro();save();renderToday();}
+  else if(t.dataset.metro){setBpm(+t.dataset.metro);show("metro");if(!M.running)startM();}
+  else if(t.id==="next"){goPhase(S.phase+1);show("today");}
+  else if(t.id==="nextAsk"){confirmNext=true;renderGoals();}
+  else if(t.id==="nextCancel"){confirmNext=false;renderGoals();}
+  else if(t.id==="nextForce"){goPhase(S.phase+1);show("today");}
+  else if(t.id==="prev"){goPhase(S.phase-1);}
+  else if(t.dataset.ear){renderEar();show("ear");}
+  else if(earClick(t)){}
+  else if(t.id==="mgo"){M.running?stopM():startM();}
+  else if(t.dataset.d){setBpm(M.bpm+(+t.dataset.d));}
+  else if(t.dataset.per){M.per=+t.dataset.per;M.beat=0;renderMetro();}
+});
+document.getElementById("app").addEventListener("change",e=>{
+  const t=e.target;
+  if(t.dataset&&t.dataset.goal!==undefined){const g=(S.goals[S.phase]||[]).slice();g[+t.dataset.goal]=t.checked;S.goals[S.phase]=g;save();renderGoals();paintStats();}
+});
+document.getElementById("app").addEventListener("input",e=>{if(e.target.id==="bpmr")setBpm(+e.target.value);});
+
+
+/* ---------- grifo natų treniruoklis su mikrofonu ---------- */
+const STR_MIDI={6:40,5:45,4:50,3:55,2:59,1:64};
+const NATURAL=["C","D","E","F","G","A","B"];
+const P={on:false,stream:null,src:null,an:null,buf:null,raf:0,round:null,hist:[],okSince:0,badSince:0,last:null,tickIv:null};
+function trCfg(){if(!S.tr)S.tr={strings:[6,5],notes:"natural",maxFret:12,len:20};return S.tr;}
+function trCells(){if(!S.trCells)S.trCells={};return S.trCells;}
+function trHist(){if(!S.trHist)S.trHist=[];return S.trHist;}
+function noteFromFreq(f){const x=12*Math.log2(f/440)+69;const r=Math.round(x);return {midi:r,pc:((r%12)+12)%12,name:NOTES[((r%12)+12)%12],oct:Math.floor(r/12)-1,cents:Math.round((x-r)*100)};}
+function detectPitch(buf,sr){
+  const N=buf.length;let rms=0;for(let i=0;i<N;i++)rms+=buf[i]*buf[i];rms=Math.sqrt(rms/N);if(rms<0.012)return -1;
+  const minLag=Math.floor(sr/1100),maxLag=Math.min(N-1,Math.floor(sr/65));
+  const c=new Float32Array(maxLag+2);
+  for(let lag=0;lag<=maxLag+1;lag++){let s=0;for(let j=0;j<N-lag;j++)s+=buf[j]*buf[j+lag];c[lag]=s;}
+  let d=minLag;while(d<maxLag&&c[d]>c[d+1])d++;
+  let best=-1,pos=-1;for(let i=d;i<=maxLag;i++){if(c[i]>best){best=c[i];pos=i;}}
+  if(pos<1||best/c[0]<0.45)return -1;
+  for(let i=d;i<pos;i++){if(c[i]>c[i-1]&&c[i]>=c[i+1]&&c[i]>0.9*best){pos=i;break;}}
+  const x1=c[pos-1],x2=c[pos],x3=c[pos+1];const a=(x1+x3-2*x2)/2,b=(x3-x1)/2;const T0=a?pos-b/(2*a):pos;
+  const f=sr/T0;return (f>60&&f<1200)?f:-1;
+}
+function cellPool(){const c=trCfg();const out=[];c.strings.forEach(s=>{for(let fr=0;fr<=c.maxFret;fr++){const m=STR_MIDI[s]+fr;const n=NOTES[m%12];if(c.notes==="natural"&&!NATURAL.includes(n))continue;out.push({s,fr,m,n});}});return out;}
+function poolNotes(){return [...new Set(cellPool().map(x=>x.n))].sort((a,b)=>NOTES.indexOf(a)-NOTES.indexOf(b));}
+function pickCell(prev){
+  const pool=cellPool();if(!pool.length)return null;const st=trCells();
+  // dažniau rodome lėtas ir klaidingas vietas
+  const w=pool.map(x=>{const k=x.s+":"+x.fr;const r=st[k];let v=r?1+Math.min(4,(r.sum/r.n)/2)+r.err*1.5/Math.max(1,r.n):2.5;if(prev&&prev.n===x.n&&prev.s===x.s)v=0;return v;});
+  const tot=w.reduce((a,b)=>a+b,0);let r=Math.random()*tot;for(let i=0;i<pool.length;i++){r-=w[i];if(r<=0)return pool[i];}return pool[pool.length-1];
+}
+function accepts(cell,midi){
+  // ta pati nata toje pačioje stygoje (0 ir 12 sk. abu tinka); žemoms stygoms toleruojame oktavos klaidą
+  const c=trCfg();const ok=[];for(let fr=0;fr<=c.maxFret;fr++){const m=STR_MIDI[cell.s]+fr;if(m%12===cell.m%12)ok.push(m);}
+  if(ok.includes(midi))return true;
+  if(cell.m<52&&ok.some(m=>m+12===midi))return true;
+  return false;
+}
+function beep(ok){const a=ac();if(!a)return;const t=a.currentTime;const o=a.createOscillator(),g=a.createGain();o.type="sine";o.frequency.value=ok?1318.5:220;g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(0.25,t+0.01);g.gain.exponentialRampToValueAtTime(0.0001,t+0.2);o.connect(g).connect(a.destination);o.start(t);o.stop(t+0.22);}
+
+async function micOn(){
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){toast("Ši naršyklė neleidžia naudoti mikrofono.");return false;}
+  try{if(navigator.audioSession)navigator.audioSession.type="play-and-record";}catch(e){}
+  const a=ac();
+  try{P.stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});}
+  catch(e){toast("Mikrofonas neleistas. Leiskite jį naršyklės nustatymuose.");return false;}
+  P.src=a.createMediaStreamSource(P.stream);P.an=a.createAnalyser();P.an.fftSize=2048;P.src.connect(P.an);P.buf=new Float32Array(P.an.fftSize);
+  P.on=true;P.hist=[];wakeOn();loop();return true;
+}
+function micOff(){P.on=false;cancelAnimationFrame(P.raf);clearInterval(P.tickIv);try{P.stream&&P.stream.getTracks().forEach(t=>t.stop());}catch(e){}try{P.src&&P.src.disconnect();}catch(e){}P.stream=null;try{if(navigator.audioSession)navigator.audioSession.type="playback";}catch(e){}wakeOff();}
+
+async function startRound(){
+  if(!cellPool().length){toast("Pasirinkite bent vieną stygą.");return;}
+  if(!P.on&&!(await micOn()))return;
+  P.round={items:[],cur:null,len:trCfg().len,started:Date.now()};nextItem();renderEar();
+  clearInterval(P.tickIv);P.tickIv=setInterval(paintClock,100);
+}
+function nextItem(){const R=P.round;const prev=R.cur?R.cur.cell:null;R.cur={cell:pickCell(prev),t0:performance.now(),wrong:false,hint:false};P.okSince=0;P.badSince=0;P.hist=[];paintRound();}
+function finishItem(ok,skipped){
+  const R=P.round;const it=R.cur;const t=(performance.now()-it.t0)/1000;
+  const rec={n:it.cell.n,s:it.cell.s,fr:it.cell.fr,t:+t.toFixed(2),first:ok&&!it.wrong,skip:!!skipped};R.items.push(rec);
+  const k=it.cell.s+":"+it.cell.fr;const st=trCells();const r=st[k]||{n:0,sum:0,err:0};
+  if(!skipped){r.n++;r.sum+=Math.min(t,15);}if(it.wrong||skipped)r.err++;st[k]=r;
+  if(ok)beep(true);
+  const el=document.getElementById("trNote");if(el&&ok){el.classList.add("ok");}
+  if(R.items.length>=R.len){setTimeout(endRound,350);}else setTimeout(()=>{if(P.round===R)nextItem();},ok?450:0);
+  R.cur=Object.assign({},it,{done:true});
+}
+function endRound(){
+  const R=P.round;if(!R)return;clearInterval(P.tickIv);
+  const done=R.items.filter(x=>!x.skip);const avg=done.length?done.reduce((a,b)=>a+b.t,0)/done.length:0;
+  const first=R.items.filter(x=>x.first).length;
+  const res={d:todayStr(),n:R.items.length,first,avg:+avg.toFixed(2),strings:trCfg().strings.slice(),notes:trCfg().notes};
+  trHist().push(res);if(S.trHist.length>200)S.trHist.shift();
+  addSecs((Date.now()-R.started)/1000);
+  P.lastRes={res,items:R.items};P.round=null;save();micOff();chime();renderEar();paintStats&&paintStats();
+}
+function stopRound(){if(P.round&&P.round.items.length>0){endRound();}else{P.round=null;clearInterval(P.tickIv);micOff();renderEar();}}
+
+let frameFlip=false;
+function loop(){
+  if(!P.on)return;P.raf=requestAnimationFrame(loop);frameFlip=!frameFlip;if(frameFlip)return;
+  P.an.getFloatTimeDomainData(P.buf);const f=detectPitch(P.buf,AC.sampleRate);
+  P.hist.push(f<0?null:noteFromFreq(f));if(P.hist.length>5)P.hist.shift();
+  const vals=P.hist.filter(Boolean);let st=null;
+  if(vals.length>=3){const cnt={};vals.forEach(v=>cnt[v.midi]=(cnt[v.midi]||0)+1);const top=Object.keys(cnt).sort((x,y)=>cnt[y]-cnt[x])[0];if(cnt[top]>=3)st=vals.filter(v=>v.midi==top).pop();}
+  const R=P.round;const heard=document.getElementById("trHeard");
+  if(heard)heard.textContent=st?"Girdžiu: "+st.name+st.oct:(P.on?"Klausau…":"");
+  if(!R||!R.cur||R.cur.done||!st){if(!st){P.okSince=0;P.badSince=0;}return;}
+  const now=performance.now();
+  if(accepts(R.cur.cell,st.midi)){P.badSince=0;if(heard)heard.className="heard good";if(!P.okSince)P.okSince=now;else if(now-P.okSince>200)finishItem(true,false);}
+  else{P.okSince=0;if(heard)heard.className="heard bad";if(!P.badSince)P.badSince=now;else if(now-P.badSince>350&&!R.cur.wrong){R.cur.wrong=true;beep(false);paintRound();}}
+}
+function paintClock(){const R=P.round;const el=document.getElementById("trClock");if(!R||!R.cur||!el)return;if(R.cur.done)return;const t=(performance.now()-R.cur.t0)/1000;el.textContent=t.toFixed(1)+" s";
+  if(t>6&&!R.cur.hint){R.cur.hint=true;const h=document.getElementById("trHint");if(h)h.textContent="Užuomina: "+R.cur.cell.fr+" skersinė";}}
+function paintRound(){
+  const R=P.round;if(!R)return;const c=R.cur.cell;
+  const n=document.getElementById("trNote");if(n){n.textContent=c.n;n.classList.remove("ok");}
+  const s=document.getElementById("trString");if(s)s.textContent=c.s+" styga";
+  const p=document.getElementById("trProg");if(p)p.textContent=(R.items.length+1)+" / "+R.len;
+  const h=document.getElementById("trHint");if(h)h.textContent=R.cur.hint?"Užuomina: "+c.fr+" skersinė":"";
+  const w=document.getElementById("trWrong");if(w)w.hidden=!R.cur.wrong;
+}
+function heatColor(r){if(!r||!r.n)return "";const a=r.sum/r.n;const e=r.err/Math.max(1,r.n+r.err);if(a<=3&&e<.2)return "good";if(a<=6)return "mid";return "slow";}
+function heatmap(){
+  const c=trCfg();const st=trCells();let h='<div class="hm-wrap"><table class="hm"><thead><tr><th></th>';
+  for(let fr=0;fr<=12;fr++)h+=`<th>${fr}</th>`;h+='</tr></thead><tbody>';
+  [1,2,3,4,5,6].forEach(s=>{h+=`<tr class="${c.strings.includes(s)?'':'off'}"><th>${s}</th>`;for(let fr=0;fr<=12;fr++){const m=STR_MIDI[s]+fr;const nm=NOTES[m%12];const r=st[s+":"+fr];const cls=heatColor(r);h+=`<td class="${cls}" title="${s} st. ${fr} sk. ${nm}${r&&r.n?': '+(r.sum/r.n).toFixed(1)+' s':''}">${nm}</td>`;}h+='</tr>';});
+  return h+'</tbody></table></div><p class="muted" style="font-size:.85rem"><span class="lg good"></span> iki 3 s <span class="lg mid"></span> 3–6 s <span class="lg slow"></span> lėčiau arba klaidos. Spalvota tik tai, ką jau bandėte.</p>';
+}
+function histHtml(){
+  const H=trHist().slice(-10).reverse();if(!H.length)return '<p class="muted">Dar nėra ratų. Po pirmojo rato čia matysite savo laiką ir tikslumą.</p>';
+  const best=Math.min(...trHist().map(x=>x.avg||99));
+  return '<div class="hm-wrap"><table class="res"><thead><tr><th>Data</th><th>Stygos</th><th>Teisingai</th><th>Vid. laikas</th></tr></thead><tbody>'+H.map(x=>`<tr><td class="mono">${x.d.slice(5)}</td><td>${x.strings.join(", ")}</td><td class="mono">${x.first}/${x.n}</td><td class="mono">${x.avg.toFixed(1)} s${x.avg===best?' <span class="pill">geriausias</span>':''}</td></tr>`).join('')+'</tbody></table></div>';
+}
+function tog(on){return on?'style="border-color:var(--accent);color:var(--accent)" aria-pressed="true"':'aria-pressed="false"';}
+function renderEar(){
+  const v=document.getElementById("v-ear");const c=trCfg();const R=P.round;
+  if(R){
+    v.innerHTML=`<div class="head"><span class="eyebrow">Grifo natos · <span id="trProg"></span></span></div>
+    <div class="metro"><span class="eyebrow">Spauskite</span><div class="target" id="trNote"></div><div class="strlabel" id="trString"></div>
+      <div class="clock mono" id="trClock">0.0 s</div><p class="muted" id="trHint"></p>
+      <span class="heard" id="trHeard">Klausau…</span><span class="wrongtag" id="trWrong" hidden>Neteisinga nata, bandykite dar</span>
+      <div class="row"><button class="btn small" id="trSkip">Praleisti</button><button class="btn small" id="trStop">Baigti ratą</button></div></div>
+    <p class="muted" style="font-size:.9rem">Grokite po vieną natą ir leiskite jai skambėti. Laikas skaičiuojamas nuo natos parodymo iki teisingo garso.</p>`;
+    paintRound();return;
+  }
+  const notes=poolNotes();const goal=S.phase===0?'<p class="muted">1 etapo tikslas: vidutiniškai iki 3 s ir be klaidų 6 ir 5 stygose.</p>':'';
+  let res='';
+  if(P.lastRes){const r=P.lastRes.res;const slow=P.lastRes.items.filter(x=>!x.first||x.t>3).sort((a,b)=>b.t-a.t).slice(0,4);
+    res=`<div class="note stack" style="gap:6px"><b>Rato rezultatas: ${r.first}/${r.n} teisingai iš pirmo karto, vidutiniškai ${r.avg.toFixed(1)} s natai.</b>${slow.length?'<span>Pakartokite: '+slow.map(x=>`${x.n} (${x.s} st. ${x.fr} sk., ${x.skip?'praleista':x.t.toFixed(1)+' s'})`).join(', ')+'</span>':'<span>Visos natos greitai ir teisingai!</span>'}</div>`;}
+  v.innerHTML=`<div class="head"><span class="eyebrow">Grifo natos su mikrofonu</span><h1>Natų treniruoklis</h1><p class="muted">Programėlė parodo natą ir stygą. Suraskite ją ir sugrokite. Mikrofonas patikrina, ar nata teisinga, ir pamatuoja laiką.</p>${goal}</div>
+  ${res}
+  <div class="theory" style="gap:12px">
+    <h3>Šiame rate atpažinsime</h3><div class="scale">${notes.map(n=>`<span class="hl">${n}</span>`).join('')}</div>
+    <p class="muted" style="font-size:.9rem">${c.strings.length?c.strings.slice().sort((a,b)=>b-a).join(", ")+" styga, ":""}0–${c.maxFret} skersinės, ${c.len} natų atsitiktine tvarka. Lėčiau rastos natos kartojasi dažniau.</p>
+    <div class="stack" style="gap:8px">
+      <span class="eyebrow">Stygos</span><div class="row" style="justify-content:flex-start">${[6,5,4,3,2,1].map(s=>`<button class="btn small" data-trs="${s}" ${tog(c.strings.includes(s))}>${s}</button>`).join('')}</div>
+      <span class="eyebrow">Natos</span><div class="row" style="justify-content:flex-start"><button class="btn small" data-trn="natural" ${tog(c.notes==='natural')}>Be diezų (7)</button><button class="btn small" data-trn="all" ${tog(c.notes==='all')}>Visos 12</button></div>
+      <span class="eyebrow">Skersinės</span><div class="row" style="justify-content:flex-start"><button class="btn small" data-trf="5" ${tog(c.maxFret===5)}>0–5</button><button class="btn small" data-trf="12" ${tog(c.maxFret===12)}>0–12</button></div>
+      <span class="eyebrow">Rato ilgis</span><div class="row" style="justify-content:flex-start">${[10,20,30].map(n=>`<button class="btn small" data-trl="${n}" ${tog(c.len===n)}>${n}</button>`).join('')}</div>
+    </div>
+    <button class="btn primary" id="trStart">Pradėti ratą</button>
+  </div>
+  <h2 style="margin-top:8px">Grifo žemėlapis</h2><p class="muted" style="font-size:.9rem">Vidutinis laikas kiekvienoje vietoje per visus ratus.</p>${heatmap()}
+  <h2 style="margin-top:8px">Paskutiniai ratai</h2>${histHtml()}`;
+}
+function earClick(t){
+  const c=trCfg();
+  if(t.id==="trStart"){P.lastRes=null;startRound();return true;}
+  if(t.id==="trSkip"){if(P.round&&P.round.cur&&!P.round.cur.done)finishItem(false,true);return true;}
+  if(t.id==="trStop"){stopRound();return true;}
+  if(t.dataset.trs){const s=+t.dataset.trs;c.strings=c.strings.includes(s)?c.strings.filter(x=>x!==s):[...c.strings,s];save();renderEar();return true;}
+  if(t.dataset.trn){c.notes=t.dataset.trn;save();renderEar();return true;}
+  if(t.dataset.trf){c.maxFret=+t.dataset.trf;save();renderEar();return true;}
+  if(t.dataset.trl){c.len=+t.dataset.trl;save();renderEar();return true;}
+  return false;
+}
+
+function renderAll(){renderToday();renderGoals();renderTheory();renderMetro();if(!P.round)renderEar();}
+function render(){renderAll();}
+renderAll();
+// refresh at midnight / when returning to the app
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&!T.running){renderToday();}});
+</script>
+</body>
+</html>
