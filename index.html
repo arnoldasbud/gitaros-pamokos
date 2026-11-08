@@ -154,6 +154,12 @@ table.res{border-collapse:collapse;width:100%;font-size:.9rem}
 .calb.okc{border-color:var(--done);color:var(--done)}
 .calb.warnc{border-color:var(--brass);color:var(--brass)}
 .calb.live{background:var(--brass-soft)}
+.recs{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.recs summary{cursor:pointer;list-style:none}
+.recs summary::-webkit-details-marker{display:none}
+.recs ul{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:10px}
+.recs li{display:flex;flex-direction:column;gap:3px;padding-top:10px;border-top:1px solid var(--line)}
+.recs li .btn{align-self:flex-start;margin-top:4px}
 .res td{padding:8px 10px;border-top:1px solid var(--line);white-space:nowrap}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
 </style>
@@ -376,7 +382,7 @@ function paintStats(){const el=document.getElementById("stats");if(el)el.outerHT
 
 function renderToday(){
   const v=document.getElementById("v-today");const dn=doneToday();const open=v.querySelector("details[open]");const openId=open?open.dataset.id:null;
-  let h=stageHeader()+`<button class="btn small" id="calOpen" style="align-self:flex-start">${calReady()?"Gitaros pritaikymas ✓":"Pritaikyti programėlę savo gitarai"}</button>`+fretStrip()+statsHtml()+'<h2 style="margin-top:8px">Šiandienos pratimai</h2>';
+  let h=stageHeader()+`<button class="btn small" id="calOpen" style="align-self:flex-start">${calReady()?"Gitaros pritaikymas ✓":"Pritaikyti programėlę savo gitarai"}</button>`+fretStrip()+statsHtml()+recsHtml()+'<h2 style="margin-top:8px">Šiandienos pratimai</h2>';
   curEx().forEach(ex=>{
     const d=dn.includes(ex.id);
     h+=`<details class="ex ${d?'done':''}" data-id="${ex.id}" ${openId===ex.id?'open':''}>
@@ -414,6 +420,15 @@ function renderGoals(){
   h+='<h2 style="margin-top:12px">Visas kelias</h2><ul class="road">';
   PHASES.forEach((ph,i)=>{h+=`<li class="${i<S.phase?'past':i===S.phase?'cur':''}"><span class="eyebrow">${i*2+1}–${i*2+2} savaitė</span><h3>${esc(ph.title)}</h3><p class="muted" style="font-size:.92rem">${esc(ph.focus)}</p></li>`;});
   h+='</ul>';
+  h+=`<details class="other"><summary>Kaip treniruotis ir kiek kartoti</summary><div class="theory" style="border:0;padding:12px 0 0">
+   <p><b>Kasdien trumpai.</b> 20–30 min 5–6 dienas per savaitę duoda daugiau nei 2 valandos kartą. Viena poilsio diena per savaitę naudinga.</p>
+   <p><b>Kartokite iki kokybės, ne iki skaičiaus.</b> Kai pratimas 3 kartus iš eilės pavyksta švariai, kelkite tempą 5 bpm. Jei suklystate 2 kartus iš eilės, tempą nuleiskite 5 bpm.</p>
+   <p><b>Vienos minutės keitimai:</b> 2–3 bandymai kiekvienai porai su 30 s pertrauka. Svarbiausias geriausias rezultatas.</p>
+   <p><b>Klausa:</b> 1–2 sesijos per dieną. Mažiau nei 6 balai: kartokite lygį. Dvi sesijos iš eilės žemiau 5: grįžkite lygiu žemiau.</p>
+   <p><b>Grifo natos:</b> vienas ratas per dieną. Kai 3 dienas iš eilės vidurkis iki 3 s ir be klaidų, pridėkite naują stygą.</p>
+   <p><b>Tikslas pasiektas,</b> kai jį įvykdote 3 dienas iš eilės.</p>
+   <p><b>Kartą per savaitę</b> 10 min skirkite ankstesnio etapo pratimams.</p>
+   <p class="muted">Šiomis taisyklėmis remiasi „Šiandienos rekomendacijos“ skiltyje „Šiandien“.</p></div></details>`;
   if(S.phase>0)h+=`<button class="btn small" id="prev" style="align-self:flex-start">Grįžti į ${S.phase} etapą</button>`;
   v.innerHTML=h;
 }
@@ -444,7 +459,7 @@ function startM(){const a=ac();if(!a){toast("Šis įrenginys negroja garso.");re
 function stopM(){M.running=false;M.byTimer=false;clearInterval(M.iv);document.querySelectorAll("#beats i").forEach(d=>d.classList.remove("on"));wakeOff();const g=document.getElementById("mgo");if(g)g.textContent="Pradėti";}
 
 /* ---------- wiring ---------- */
-function show(v){document.querySelectorAll("nav.tabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.v===v));if(v!=="ear2"&&E.sess)endSess();if(v!=="cal"&&CAL.active)calStop();["today","goals","theory","metro","ear","ear2","cal"].forEach(k=>document.getElementById("v-"+k).hidden=k!==v);const keep=(CH2.active||RM.active)?v==="today":P.round?(P.round.inline?v==="today":v==="ear"):(v==="ear2"&&E.mode==="match");if((P.on||P.round)&&!keep){if((P.round&&P.round.inline)||CH2.active||RM.active)pauseT();else stopRound();}window.scrollTo(0,0);}
+function show(v){document.querySelectorAll("nav.tabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.v===v));if(v!=="ear2"&&E.sess)endSess();if(v==="today")setTimeout(renderToday,0);if(v!=="cal"&&CAL.active)calStop();["today","goals","theory","metro","ear","ear2","cal"].forEach(k=>document.getElementById("v-"+k).hidden=k!==v);const keep=(CH2.active||RM.active)?v==="today":P.round?(P.round.inline?v==="today":v==="ear"):(v==="ear2"&&E.mode==="match");if((P.on||P.round)&&!keep){if((P.round&&P.round.inline)||CH2.active||RM.active)pauseT();else stopRound();}window.scrollTo(0,0);}
 document.querySelector("nav.tabs").addEventListener("click",e=>{const b=e.target.closest("button");if(b)show(b.dataset.v);});
 document.getElementById("app").addEventListener("click",e=>{
   const t=e.target.closest("button");if(!t)return;
@@ -462,6 +477,7 @@ document.getElementById("app").addEventListener("click",e=>{
   else if(t.dataset.ear){renderEar();show("ear");}
   else if(t.dataset.eartr){if(P.on)stopRound();if(!E.sess){E.mode=t.dataset.eartr;E.q=null;E.last=null;}renderEarTrain();show("ear2");}
   else if(calClick(t)){}
+  else if(t.dataset.gotab){renderEar();show(t.dataset.gotab);}
   else if(rhyClick(t)){}
   else if(chgClick(t)){}
   else if(earClick(t)){}
@@ -1111,6 +1127,57 @@ function calClick(t){
   if(t.id==="calBack"){if(CAL.active)calStop();show("today");return true;}
   return false;
 }
+
+
+/* ---------- šiandienos rekomendacijos ---------- */
+function recs(){
+  const out=[];const today=todayStr();const ph=PHASES[S.phase];const day=daysBetween(S.phaseStart,today)+1;
+  if(S.phase===0&&day<=3)out.push({k:"Pirštai",t:"Pirmomis dienomis grokite 2 kartus po 10 min. Jei galiukai skauda, sustokite ir tęskite vėliau."});
+  const past=Object.keys(S.log).filter(d=>d<today&&S.log[d]>=60).sort();
+  if(past.length){const gap=daysBetween(past[past.length-1],today);if(gap>=2)out.push({k:"Grįžimas",t:`Paskutinį kartą grojote prieš ${gap} d. Šiandien pradėkite nuo apšilimo ir 5–10 bpm lėtesnio tempo.`});}
+  // klausa
+  const eex=ph.ex.find(e=>e.eartr);
+  if(eex){const m=eex.eartr;const H=(S.earHist||[]).filter(x=>x.mode===m);const td=H.filter(x=>x.d===today).length;const L=eLevel(m);const nm=EMODES[m].t;
+    let t;
+    if(td>=2)t=`„${nm}“: šiandien ${td} sesijos, užteks ✓`;
+    else if(!H.length)t=`„${nm}“: 1 sesija, ${L+1} lygis.`;
+    else{const last=H[H.length-1];const prev=H[H.length-2];
+      if(last.up)t=`„${nm}“: atsivėrė ${L+1} lygis. 1–2 sesijos jame.`;
+      else if(last.grade>=9)t=`„${nm}“: paskutinė sesija ${last.grade}/10. 1 sesija ${L+1} lygyje, tada galite rinktis sunkesnį.`;
+      else if(last.grade>=6)t=`„${nm}“: paskutinė sesija ${last.grade}/10. 2 sesijos ${L+1} lygyje, siekite 9.`;
+      else if(prev&&prev.grade<5&&last.grade<5&&L>0)t=`„${nm}“: dvi sesijos žemiau 5. Grįžkite į ${L} lygį ir atlikite 2 sesijas.`;
+      else t=`„${nm}“: paskutinė sesija ${last.grade}/10. Pakartokite ${L+1} lygį 2 kartus, prieš atsakydami tyliai padainuokite.`;}
+    out.push({k:"Klausa",t,act:`<button class="btn small" data-eartr="${m}">Atidaryti</button>`});}
+  // grifo natos
+  const TH=S.trHist||[];
+  if(S.phase<=1||TH.length){const td=TH.filter(x=>x.d===today);const c=trCfg();
+    if(td.length)out.push({k:"Grifo natos",t:`Šiandien atlikta (${td[td.length-1].first}/${td[td.length-1].n}, ${td[td.length-1].avg.toFixed(1)} s) ✓`});
+    else{const days=[...new Set(TH.map(x=>x.d))].slice(-3);const lastPerDay=days.map(d=>TH.filter(x=>x.d===d).pop());
+      const mastered=lastPerDay.length===3&&lastPerDay.every(x=>x.avg<=3&&x.first===x.n&&x.strings.join()===c.strings.join());
+      const nextS=[6,5,4,3,2,1].find(s=>!c.strings.includes(s));
+      if(mastered&&nextS)out.push({k:"Grifo natos",t:`3 dienas iš eilės be klaidų ir iki 3 s. Pridėkite ${nextS} stygą ir atlikite 1 ratą.`,act:`<button class="btn small" data-gotab="ear">Atidaryti</button>`});
+      else{const st=trCells();const weak=Object.entries(st).filter(([k,r])=>c.strings.includes(+k.split(":")[0])&&r.n).map(([k,r])=>{const [s,fr]=k.split(":").map(Number);return {s,fr,n:NOTES[(STR_MIDI[s]+fr)%12],a:r.sum/r.n+r.err};}).sort((a,b)=>b.a-a.a).slice(0,3);
+        out.push({k:"Grifo natos",t:`1 ratas po 20 natų.${weak.length?" Silpniausios vietos: "+weak.map(w=>`${w.n} (${w.s} st. ${w.fr} sk.)`).join(", ")+".":""}`,act:`<button class="btn small" data-gotab="ear">Atidaryti</button>`});}}}
+  // akordų keitimai
+  const pairs=[];ph.ex.filter(e=>e.changes).forEach(e=>e.changes.forEach(p=>{const k=p.join("–");if(!pairs.includes(k))pairs.push(k);}));
+  pairs.slice(0,2).forEach(pr=>{const H=(S.chHist||[]).filter(x=>x.pair===pr);
+    if(!H.length){out.push({k:"Keitimai",t:`${pr}: 3 bandymai po 1 min su 30 s pertrauka. Pirmas rezultatas bus jūsų atskaitos taškas.`});return;}
+    const best=Math.max(...H.map(x=>x.cleanPerMin));const last=H[H.length-1];
+    out.push({k:"Keitimai",t:best>=30?`${pr}: tikslas pasiektas (${best} švarių/min). Patvirtinkite 3 dienas iš eilės.`:`${pr}: paskutinis ${last.cleanPerMin} švarių/min, geriausias ${best}. 3 bandymai, siekite ${best+2}.`});});
+  // ritmas
+  pairs.slice(0,2).forEach(pr=>{const H=(S.rhHist||[]).filter(x=>x.pair===pr);if(!H.length)return;const r=H[H.length-1];
+    let t;if(r.onTime>=80&&r.chOk===r.changes)t=`${pr}: puikus ritmas ${r.bpm} bpm. Pakelkite iki ${Math.min(90,r.bpm+5)} bpm${r.per===4&&r.bpm>=80?" arba keiskite kas 2 tvaksnius":""}.`;
+    else if(r.onTime<60)t=`${pr}: tik ${r.onTime}% braukimų laiku. Sumažinkite tempą iki ${Math.max(50,r.bpm-5)} bpm.`;
+    else t=`${pr}: likite ties ${r.bpm} bpm, kol bent 80% braukimų bus laiku ir visi keitimai laiku.`;
+    out.push({k:"Ritmas",t});});
+  if(!calReady()&&pairs.length)out.push({k:"Etalonas",t:"Įrašykite gitaros etaloną, kad keitimų ir braukimo vertinimas būtų tikslus.",act:`<button class="btn small" id="calOpen">Įrašyti</button>`});
+  if(S.phase>0&&new Date().getDay()===0)out.push({k:"Kartojimas",t:`Sekmadienis: 10 min skirkite ${S.phase}. etapo („${PHASES[S.phase-1].title}“) pratimams.`});
+  const g=phaseGoals();const unmet=ph.goals.filter((_,i)=>!g[i]);
+  if(day>14&&unmet.length)out.push({k:"Tikslai",t:`Etapas tęsiasi ${day} d. Tai normalu. Daugiausia dėmesio skirkite: ${unmet.slice(0,2).join("; ")}.`});
+  return out;
+}
+function recsHtml(){const R=recs();if(!R.length)return '';
+  return `<details class="recs" open><summary><h2 style="display:inline">Šiandienos rekomendacijos</h2></summary><ul>${R.map(r=>`<li><span class="eyebrow">${esc(r.k)}</span><span>${esc(r.t)}</span>${r.act||''}</li>`).join('')}</ul></details>`;}
 
 function renderAll(){renderToday();renderGoals();renderTheory();renderMetro();if(!P.round)renderEar();renderEarTrain();renderCal();}
 function render(){renderAll();}
