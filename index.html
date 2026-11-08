@@ -143,6 +143,8 @@ table.res{border-collapse:collapse;width:100%;font-size:.9rem}
 .efb{text-align:center;min-height:1.5em}.efb.good{color:var(--done)}.efb.bad{color:var(--warn)}
 .efb .muted{font-size:.88rem}
 .btn.play{font-size:1.15rem;min-width:200px;min-height:56px;border-radius:14px}
+.drill{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;background:var(--bg);border-radius:12px;padding:14px}
+.drill .target{font-size:4rem}
 .res td{padding:8px 10px;border-top:1px solid var(--line);white-space:nowrap}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
 </style>
@@ -185,7 +187,7 @@ const PHASES=[
  ex:[
   {id:"warm",n:"Apšilimas",m:2,h:"Pagniaužykite kumštį, patempkite pirštus atgal, pakratykite riešus. Pečiai atpalaiduoti."},
   {id:"chrom",n:"Chromatinis 1-2-3-4",m:5,bpm:60,h:"Kiekvienoje stygoje paspauskite 1, 2, 3, 4 skersines 1, 2, 3, 4 pirštais, nuo 6 stygos iki 1 ir atgal. Viena nata vienam tvaksniui. Pirštai arti stygų, spausti tik tiek, kad skambėtų švariai."},
-  {id:"notes65",n:"Natos 6 ir 5 stygoje",m:4,h:"Pasirinkite natą (pvz., G), suraskite ją 6 stygoje, tada 5 stygoje. Sakykite pavadinimą garsiai. Kitą dieną kitos natos. Pradėkite nuo C, G, D, A, F."},
+  {id:"notes65",n:"Natos 6 ir 5 stygoje",m:4,drill:true,h:"Paspauskite „Pradėti“: programėlė atsitiktine tvarka rodys natą ir stygą. Suraskite ir sugrokite ją, sakydami pavadinimą garsiai. Mikrofonas patikrins, ar nata teisinga, ir pamatuos laiką."},
   {id:"emam",n:"Akordai Em ir Am",m:5,bpm:60,h:"Išmokite pirštuotę. Tada grokite po 4 smūgius žemyn kiekvienam akordui pagal metronomą. Pirmiausia tikrinkite, ar skamba visos stygos."},
   {id:"min1",n:"Vienos minutės keitimai",m:1,h:"Per minutę keiskite Em ↔ Am kuo daugiau kartų (švariai). Suskaičiuokite ir užsirašykite. Tai jūsų tikslo matas."}
  ],
@@ -332,13 +334,13 @@ document.addEventListener("visibilitychange",()=>{if(document.visibilityState===
 const T={id:null,total:0,left:0,running:false,last:0,iv:null,spent:0};
 function fmt(s){s=Math.max(0,Math.ceil(s));return String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
 function timerFor(ex){if(T.id!==ex.id){if(T.running)pauseT();T.id=ex.id;T.total=ex.m*60;T.left=T.total;T.spent=0;}}
-function startT(ex){ac();timerFor(ex);if(T.left<=0)T.left=T.total;if(ex.bpm&&S.metroWithTimer!==false){setBpm(ex.bpm);if(!M.running){startM();M.byTimer=true;}}T.running=true;T.last=performance.now();clearInterval(T.iv);T.iv=setInterval(tick,250);wakeOn();paintTimer();}
+function startT(ex){ac();if(ex.drill&&!(P.round&&P.round.inline))startInline();timerFor(ex);if(T.left<=0)T.left=T.total;if(ex.bpm&&S.metroWithTimer!==false){setBpm(ex.bpm);if(!M.running){startM();M.byTimer=true;}}T.running=true;T.last=performance.now();clearInterval(T.iv);T.iv=setInterval(tick,250);wakeOn();paintTimer();}
 function stopTimerMetro(){if(M.byTimer){M.byTimer=false;stopM();}}
-function pauseT(){if(!T.running)return;tick();T.running=false;clearInterval(T.iv);stopTimerMetro();flushSpent();wakeOff();paintTimer();}
+function pauseT(){if(!T.running)return;tick();T.running=false;clearInterval(T.iv);stopTimerMetro();if(P.round&&P.round.inline)endRound();flushSpent();wakeOff();paintTimer();}
 function resetT(ex){pauseT();T.id=ex.id;T.total=ex.m*60;T.left=T.total;T.spent=0;paintTimer();}
 function flushSpent(){if(T.spent>0){addSecs(T.spent);T.spent=0;save();paintStats();}}
 function tick(){if(!T.running)return;const now=performance.now();const dt=(now-T.last)/1000;T.last=now;T.left-=dt;T.spent+=dt;
-  if(T.left<=0){T.left=0;T.running=false;clearInterval(T.iv);stopTimerMetro();flushSpent();markDone(T.id,true);save();chime();toast("Laikas baigėsi. Pratimas atliktas!");wakeOff();renderToday();return;}
+  if(T.left<=0){T.left=0;T.running=false;clearInterval(T.iv);stopTimerMetro();if(P.round&&P.round.inline)endRound();flushSpent();markDone(T.id,true);save();chime();toast("Laikas baigėsi. Pratimas atliktas!");wakeOff();renderToday();return;}
   paintTimer();}
 function paintTimer(){document.querySelectorAll("[data-clock]").forEach(el=>{const id=el.dataset.clock;const ex=curEx().find(e=>e.id===id);if(!ex)return;const tot=ex.m*60;const left=T.id===id?T.left:tot;el.textContent=fmt(left);el.classList.toggle("run",T.id===id&&T.running);const bar=document.querySelector('[data-bar="'+id+'"]');if(bar)bar.style.width=((1-left/tot)*100)+"%";const b=document.querySelector('[data-start="'+id+'"]');if(b)b.textContent=(T.id===id&&T.running)?"Pauzė":(T.id===id&&left<tot&&left>0?"Tęsti":"Pradėti");});}
 
@@ -374,6 +376,7 @@ function renderToday(){
           <button class="btn primary" data-start="${ex.id}">Pradėti</button>
           <button class="btn small" data-reset="${ex.id}">Iš naujo</button></div>
         <div class="bar"><i data-bar="${ex.id}"></i></div>
+        ${ex.drill?`<div class="drill" id="drillBox">${drillHtml()}</div>`:''}
         <div class="row" style="justify-content:flex-start">
           ${ex.bpm?`<button class="btn small" data-mwt="1" aria-pressed="${S.metroWithTimer!==false}">Metronomas su laikmačiu: ${S.metroWithTimer!==false?'įjungtas':'išjungtas'}</button><button class="btn small" data-metro="${ex.bpm}">Atidaryti metronomą</button>`:''}
           ${ex.eartr?`<button class="btn small" data-eartr="${ex.eartr}">Atidaryti klausos treniruotę</button>`:''}
@@ -383,7 +386,7 @@ function renderToday(){
   });
   const all=curEx().every(e=>dn.includes(e.id));
   if(all)h+=`<div class="note"><b>Šiandienos sesija baigta.</b> Pažiūrėkite į <b>Tikslai</b> skiltį ir pažymėkite, ką jau pasiekėte.</div>`;
-  v.innerHTML=h;paintTimer();
+  v.innerHTML=h;paintTimer();if(P.round&&P.round.inline)paintRound();
 }
 
 let confirmNext=false;
@@ -430,7 +433,7 @@ function startM(){const a=ac();if(!a){toast("Šis įrenginys negroja garso.");re
 function stopM(){M.running=false;M.byTimer=false;clearInterval(M.iv);document.querySelectorAll("#beats i").forEach(d=>d.classList.remove("on"));wakeOff();const g=document.getElementById("mgo");if(g)g.textContent="Pradėti";}
 
 /* ---------- wiring ---------- */
-function show(v){document.querySelectorAll("nav.tabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.v===v));["today","goals","theory","metro","ear","ear2"].forEach(k=>document.getElementById("v-"+k).hidden=k!==v);if((v!=="ear"&&P.round)||(P.on&&!(v==="ear2"&&E.mode==="match")&&!(v==="ear"&&P.round)))stopRound();window.scrollTo(0,0);}
+function show(v){document.querySelectorAll("nav.tabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.v===v));["today","goals","theory","metro","ear","ear2"].forEach(k=>document.getElementById("v-"+k).hidden=k!==v);const keep=P.round?(P.round.inline?v==="today":v==="ear"):(v==="ear2"&&E.mode==="match");if((P.on||P.round)&&!keep){if(P.round&&P.round.inline)pauseT();else stopRound();}window.scrollTo(0,0);}
 document.querySelector("nav.tabs").addEventListener("click",e=>{const b=e.target.closest("button");if(b)show(b.dataset.v);});
 document.getElementById("app").addEventListener("click",e=>{
   const t=e.target.closest("button");if(!t)return;
@@ -527,12 +530,13 @@ function finishItem(ok,skipped){
 }
 function endRound(){
   const R=P.round;if(!R)return;clearInterval(P.tickIv);
+  if(R.inline&&!R.items.length){P.round=null;micOff();const db0=document.getElementById("drillBox");if(db0)db0.innerHTML=drillHtml();return;}
   const done=R.items.filter(x=>!x.skip);const avg=done.length?done.reduce((a,b)=>a+b.t,0)/done.length:0;
   const first=R.items.filter(x=>x.first).length;
   const res={d:todayStr(),n:R.items.length,first,avg:+avg.toFixed(2),strings:trCfg().strings.slice(),notes:trCfg().notes};
   trHist().push(res);if(S.trHist.length>200)S.trHist.shift();
-  addSecs((Date.now()-R.started)/1000);
-  P.lastRes={res,items:R.items};P.round=null;save();micOff();chime();renderEar();paintStats&&paintStats();
+  if(!R.inline)addSecs((Date.now()-R.started)/1000);
+  P.lastRes={res,items:R.items,inline:!!R.inline};P.round=null;save();micOff();if(!R.inline)chime();renderEar();const db=document.getElementById("drillBox");if(db)db.innerHTML=drillHtml();paintStats&&paintStats();
 }
 function stopRound(){if(P.round&&P.round.items.length>0){endRound();}else{P.round=null;clearInterval(P.tickIv);micOff();renderEar();}}
 
@@ -557,7 +561,7 @@ function paintRound(){
   const R=P.round;if(!R)return;const c=R.cur.cell;
   const n=document.getElementById("trNote");if(n){n.textContent=c.n;n.classList.remove("ok");}
   const s=document.getElementById("trString");if(s)s.textContent=c.s+" styga";
-  const p=document.getElementById("trProg");if(p)p.textContent=(R.items.length+1)+" / "+R.len;
+  const p=document.getElementById("trProg");if(p)p.textContent=R.inline?(R.items.length+1)+"-a nata":(R.items.length+1)+" / "+R.len;
   const h=document.getElementById("trHint");if(h)h.textContent=R.cur.hint?"Užuomina: "+c.fr+" skersinė":"";
   const w=document.getElementById("trWrong");if(w)w.hidden=!R.cur.wrong;
 }
@@ -576,7 +580,7 @@ function histHtml(){
 function tog(on){return on?'style="border-color:var(--accent);color:var(--accent)" aria-pressed="true"':'aria-pressed="false"';}
 function renderEar(){
   const v=document.getElementById("v-ear");const c=trCfg();const R=P.round;
-  if(R){
+  if(R&&!R.inline){
     v.innerHTML=`<div class="head"><span class="eyebrow">Grifo natos · <span id="trProg"></span></span></div>
     <div class="metro"><span class="eyebrow">Spauskite</span><div class="target" id="trNote"></div><div class="strlabel" id="trString"></div>
       <div class="clock mono" id="trClock">0.0 s</div><p class="muted" id="trHint"></p>
@@ -605,9 +609,27 @@ function renderEar(){
   <h2 style="margin-top:8px">Grifo žemėlapis</h2><p class="muted" style="font-size:.9rem">Vidutinis laikas kiekvienoje vietoje per visus ratus.</p>${heatmap()}
   <h2 style="margin-top:8px">Paskutiniai ratai</h2>${histHtml()}`;
 }
+async function startInline(){
+  if(P.round)return;
+  P.round={items:[],cur:null,len:999,started:Date.now(),inline:true,manual:false};P.lastRes=null;
+  const ok=await micOn();if(!P.round)return;P.round.manual=!ok;
+  const db=document.getElementById("drillBox");if(db)db.innerHTML=drillHtml();
+  nextItem();clearInterval(P.tickIv);P.tickIv=setInterval(paintClock,100);
+}
+function drillHtml(){
+  const R=P.round;
+  if(R&&R.inline)return `<span class="eyebrow">Spauskite · <span id="trProg"></span></span><div class="target" id="trNote"></div><div class="strlabel" id="trString"></div>
+    <div class="clock mono" id="trClock" style="font-size:1.4rem">0.0 s</div><p class="muted" id="trHint"></p>
+    <span class="heard" id="trHeard">${R.manual?'Sugrokite ir paspauskite „Radau“':'Klausau…'}</span><span class="wrongtag" id="trWrong" hidden>Neteisinga nata, bandykite dar</span>
+    <div class="row">${R.manual?'<button class="btn primary small" id="trFound">Radau</button>':''}<button class="btn small" id="trSkip">Praleisti</button></div>`;
+  if(P.lastRes&&P.lastRes.inline){const r=P.lastRes.res;const slow=P.lastRes.items.filter(x=>!x.first||x.t>3).sort((a,b)=>b.t-a.t).slice(0,4);
+    return `<b>Rezultatas: ${r.first}/${r.n} teisingai iš pirmo karto, vidutiniškai ${r.avg.toFixed(1)} s natai.</b>${slow.length?'<span class="muted">Pakartokite: '+slow.map(x=>`${x.n} (${x.s} st.)`).join(', ')+'</span>':''}<span class="muted" style="font-size:.88rem">Visa statistika ir grifo žemėlapis skiltyje „Grifas“.</span>`;}
+  return `<span class="muted">Paspaudus „Pradėti“ čia atsitiktine tvarka bus rodomos natos ir styga, kurias reikia rasti.</span>`;
+}
 function earClick(t){
   const c=trCfg();
   if(t.id==="trStart"){P.lastRes=null;startRound();return true;}
+  if(t.id==="trFound"){if(P.round&&P.round.cur&&!P.round.cur.done)finishItem(true,false);return true;}
   if(t.id==="trSkip"){if(P.round&&P.round.cur&&!P.round.cur.done)finishItem(false,true);return true;}
   if(t.id==="trStop"){stopRound();return true;}
   if(t.dataset.trs){const s=+t.dataset.trs;c.strings=c.strings.includes(s)?c.strings.filter(x=>x!==s):[...c.strings,s];save();renderEar();return true;}
