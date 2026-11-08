@@ -173,6 +173,9 @@ table.res{border-collapse:collapse;width:100%;font-size:.9rem}
 .fbn i{font-style:normal;color:var(--brass);font-size:.9rem}
 .fbc{position:relative;height:34px;border:0;border-bottom:2px solid var(--line);padding:0;cursor:pointer;touch-action:manipulation;
   background:linear-gradient(to right,transparent calc(50% - var(--sw)/2),var(--muted) calc(50% - var(--sw)/2),var(--muted) calc(50% + var(--sw)/2),transparent calc(50% + var(--sw)/2))}
+.fgstr{display:block;font-size:1.1rem;color:var(--brass);margin-top:4px}
+.fbc.tcol{background-color:var(--brass-soft)}
+.fbh.tcolh{color:var(--brass);font-weight:700}
 .fbc.open{border-bottom:5px solid var(--fg)}
 .fbc.off{opacity:.3;cursor:default}
 .fbc span{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);min-width:26px;height:26px;border-radius:13px;display:grid;place-items:center;font-family:var(--f-mono);font-size:.72rem;font-weight:700;padding:0 3px}
@@ -1301,12 +1304,12 @@ function fgPoolNotes(){const c=fgCfg();const set=new Set();c.strings.forEach(s=>
 function fgKey(){const c=fgCfg();return c.strings.slice().sort().join("")+"|"+c.notes+"|"+c.maxFret;}
 function fgBest(){const H=(S.fgHist||[]).filter(x=>x.key===fgKey());return H.length?Math.max(...H.map(x=>x.score)):0;}
 function fgStart(){const pool=fgPoolNotes();if(!pool.length){toast("Pasirinkite bent vieną stygą.");return;}ac();Object.assign(FG,{active:true,score:0,streak:0,i:0,first:0,wrong:0,times:[],res:null,flash:{},target:null,started:Date.now()});fgNext();clearInterval(FG.tIv);FG.tIv=setInterval(fgClock,100);}
-function fgNext(){const pool=fgPoolNotes();let n;do{n=rnd(pool);}while(pool.length>1&&n===FG.target);FG.target=n;FG.t0=performance.now();FG.wrongThis=0;FG.reveal=false;FG.lock=false;FG.flash={};renderEar();}
-function fgPositions(n){const c=fgCfg();const out=[];c.strings.forEach(s=>{for(let fr=0;fr<=c.maxFret;fr++)if(NOTES[(STR_MIDI[s]+fr)%12]===n)out.push(s+":"+fr);});return out;}
+function fgNext(){const c=fgCfg();const cells=[];c.strings.forEach(s=>{const seen=new Set();for(let fr=0;fr<=c.maxFret;fr++){const n=NOTES[(STR_MIDI[s]+fr)%12];if((c.notes==="all"||NATURAL.includes(n))&&!seen.has(n)){seen.add(n);cells.push({s,n});}}});let x;do{x=rnd(cells);}while(cells.length>1&&x.n===FG.target&&x.s===FG.tStr);FG.target=x.n;FG.tStr=x.s;FG.t0=performance.now();FG.wrongThis=0;FG.reveal=false;FG.lock=false;FG.flash={};renderEar();}
+function fgPositions(n){const c=fgCfg();const out=[];[FG.tStr].forEach(s=>{for(let fr=0;fr<=c.maxFret;fr++)if(NOTES[(STR_MIDI[s]+fr)%12]===n)out.push(s+":"+fr);});return out;}
 function fgTap(s,fr){
   if(!FG.active||FG.lock)return;const c=fgCfg();if(!c.strings.includes(s)||fr>c.maxFret)return;
   const n=NOTES[(STR_MIDI[s]+fr)%12];const k=s+":"+fr;
-  if(n===FG.target){const t=(performance.now()-FG.t0)/1000;const mult=1+Math.min(FG.streak,10)*0.1;const pts=Math.round((100+Math.max(0,100-t*20))*mult);
+  if(n===FG.target&&s===FG.tStr){const t=(performance.now()-FG.t0)/1000;const mult=1+Math.min(FG.streak,10)*0.1;const pts=Math.round((100+Math.max(0,100-t*20))*mult);
     FG.score+=pts;FG.streak++;if(!FG.wrongThis)FG.first++;FG.times.push(t);FG.flash={[k]:"good"};FG.lastPts=pts;FG.lock=true;beep(true);FG.i++;renderEar();
     setTimeout(()=>{if(!FG.active)return;if(FG.i>=c.n)fgEnd();else fgNext();},450);}
   else{FG.score=Math.max(0,FG.score-25);FG.streak=0;FG.wrongThis++;FG.wrong++;FG.flash[k]="bad";FG.lastPts=-25;beep(false);if(FG.wrongThis>=2)FG.reveal=true;renderEar();}
@@ -1322,12 +1325,12 @@ function fgEnd(){
 function fgClock(){const el=document.getElementById("fgClock");if(el&&FG.active&&!FG.lock)el.textContent=((performance.now()-FG.t0)/1000).toFixed(1)+" s";}
 function fbHtml(){
   const c=fgCfg();const pos=FG.reveal?fgPositions(FG.target):[];let h='<div class="fb" role="grid" aria-label="Gitaros grifas"><span></span>';
-  [6,5,4,3,2,1].forEach(s=>h+=`<span class="fbh">${s}</span>`);
+  [6,5,4,3,2,1].forEach(s=>h+=`<span class="fbh ${FG.active&&s===FG.tStr?'tcolh':''}">${s}</span>`);
   for(let fr=0;fr<=12;fr++){
     h+=`<span class="fbn">${fr}${[3,5,7,9].includes(fr)?'<i>•</i>':fr===12?'<i>••</i>':''}</span>`;
     [6,5,4,3,2,1].forEach((s,si)=>{const on=c.strings.includes(s)&&fr<=c.maxFret;const k=s+":"+fr;const n=NOTES[(STR_MIDI[s]+fr)%12];const fl=FG.flash[k]||(pos.includes(k)?"show":"");
-      const lab=(fl||(c.labels&&on))?n:"";
-      h+=`<button class="fbc ${fr===0?'open':''} ${on?'':'off'} ${fl}" style="--sw:${(1+ (6-si)*0.35).toFixed(2)}px" data-fs="${s}" data-ff="${fr}" ${on?'':'tabindex="-1" aria-disabled="true"'} aria-label="${s} styga, ${fr} skersinė"><span>${lab}</span></button>`;});
+      const lab=(fl||(c.labels&&on))?n:"";const tcol=FG.active&&s===FG.tStr;
+      h+=`<button class="fbc ${fr===0?'open':''} ${on?'':'off'} ${tcol?'tcol':''} ${fl}" style="--sw:${(1+ (6-si)*0.35).toFixed(2)}px" data-fs="${s}" data-ff="${fr}" ${on?'':'tabindex="-1" aria-disabled="true"'} aria-label="${s} styga, ${fr} skersinė"><span>${lab}</span></button>`;});
   }
   return h+'</div>';
 }
@@ -1336,15 +1339,15 @@ function fgHistHtml(){const H=(S.fgHist||[]).slice(-6).reverse();if(!H.length)re
 function renderFG(v){
   const c=fgCfg();
   if(FG.active){
-    v.innerHTML=`<div class="fgbar"><div><span class="eyebrow">${FG.i+ (FG.lock?0:1)} / ${c.n}</span><div class="fgt">${FG.target}</div></div>
+    v.innerHTML=`<div class="fgbar"><div><span class="eyebrow">${FG.i+ (FG.lock?0:1)} / ${c.n}</span><div class="fgt">${FG.target}<span class="fgstr">${FG.tStr} styga</span></div></div>
       <div style="text-align:right"><span class="eyebrow">Taškai</span><div class="mono fgs">${FG.score}</div><span class="mono muted" id="fgClock">0.0 s</span>${FG.streak>1?` <span class="pill">×${(1+Math.min(FG.streak,10)*0.1).toFixed(1)}</span>`:''}</div></div>
-      <p class="muted" style="font-size:.88rem;margin:0">${FG.reveal?`Teisingos vietos pažymėtos. Paspauskite vieną iš jų.`:FG.lastPts<0?'Ne ta nata. Bandykite dar.':'Paspauskite natą <b>'+FG.target+'</b> bet kurioje pažymėtoje stygoje.'}</p>
+      <p class="muted" style="font-size:.88rem;margin:0">${FG.reveal?`Teisingos vietos pažymėtos. Paspauskite vieną iš jų.`:FG.lastPts<0?'Ne ta vieta. Bandykite dar.':'Paspauskite natą <b>'+FG.target+'</b> '+FG.tStr+' stygoje.'}</p>
       ${fbHtml()}
       <div class="row"><button class="btn small" id="fgSkip">Nežinau</button><button class="btn small" id="fgStop">Baigti</button></div>`;
     return;
   }
   const R=FG.res;const best=fgBest();
-  v.innerHTML=`<div class="head"><span class="eyebrow">Žaidimas be gitaros</span><h1>Rask natą grife</h1><p class="muted">Programėlė parodo natą, o jūs paspaudžiate ją grife. Greitas teisingas atsakymas duoda iki 200 taškų, serija iš eilės juos padaugina, klaida atima 25.</p></div>
+  v.innerHTML=`<div class="head"><span class="eyebrow">Žaidimas be gitaros</span><h1>Rask natą grife</h1><p class="muted">Programėlė parodo natą ir stygą, pvz. „D, 5 styga“, o jūs paspaudžiate ją grife. Greitas teisingas atsakymas duoda iki 200 taškų, serija iš eilės juos padaugina, klaida atima 25.</p></div>
    ${R?`<div class="metro" style="gap:10px"><span class="eyebrow">Rezultatas</span><div class="bpm">${R.score}</div>${R.record?'<span class="pill">Naujas rekordas!</span>':`<span class="muted">Rekordas: ${best}</span>`}
      <div class="rgrid"><div class="stat"><b>${R.first}/${R.n}</b><small>iš pirmo karto</small></div><div class="stat"><b>${R.avg} s</b><small>vid. laikas natai</small></div></div></div>`:''}
    <div class="theory" style="gap:10px">
