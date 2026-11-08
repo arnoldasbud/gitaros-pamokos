@@ -164,6 +164,23 @@ table.res{border-collapse:collapse;width:100%;font-size:.9rem}
 .scgrid span{display:flex;flex-direction:column;align-items:center;border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:.8rem;min-width:52px}
 .scgrid span.okc{border-color:var(--done);color:var(--done)}
 .scgrid span.warnc{border-color:var(--warn);color:var(--warn)}
+.fgbar{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
+.fgt{font-family:var(--f-display);font-size:3.4rem;font-weight:700;line-height:1}
+.fgs{font-size:1.8rem;font-weight:700;line-height:1.1}
+.fb{display:grid;grid-template-columns:30px repeat(6,minmax(0,1fr));background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:4px 6px 6px;user-select:none;-webkit-user-select:none}
+.fbh{text-align:center;font-family:var(--f-mono);font-size:.72rem;color:var(--muted);padding:2px 0 4px}
+.fbn{display:flex;align-items:center;justify-content:center;gap:2px;font-family:var(--f-mono);font-size:.72rem;color:var(--muted);border-bottom:2px solid transparent}
+.fbn i{font-style:normal;color:var(--brass);font-size:.9rem}
+.fbc{position:relative;height:34px;border:0;border-bottom:2px solid var(--line);padding:0;cursor:pointer;touch-action:manipulation;
+  background:linear-gradient(to right,transparent calc(50% - var(--sw)/2),var(--muted) calc(50% - var(--sw)/2),var(--muted) calc(50% + var(--sw)/2),transparent calc(50% + var(--sw)/2))}
+.fbc.open{border-bottom:5px solid var(--fg)}
+.fbc.off{opacity:.3;cursor:default}
+.fbc span{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);min-width:26px;height:26px;border-radius:13px;display:grid;place-items:center;font-family:var(--f-mono);font-size:.72rem;font-weight:700;padding:0 3px}
+.fbc span:not(:empty){background:var(--surface);border:1px solid var(--line);color:var(--fg)}
+.fbc.good span{background:var(--done);border-color:var(--done);color:var(--accent-ink)}
+.fbc.bad span{background:var(--warn);border-color:var(--warn);color:var(--surface)}
+.fbc.show span{background:var(--brass);border-color:var(--brass);color:var(--surface)}
+.fbc:active:not(.off){background-color:var(--brass-soft)}
 .res td{padding:8px 10px;border-top:1px solid var(--line);white-space:nowrap}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
 </style>
@@ -483,6 +500,7 @@ document.getElementById("app").addEventListener("click",e=>{
   else if(calClick(t)){}
   else if(t.dataset.gotab){renderEar();show(t.dataset.gotab);}
   else if(rhyClick(t)){}
+  else if(fgClick(t)){}
   else if(scClick(t)){}
   else if(chgClick(t)){}
   else if(earClick(t)){}
@@ -615,7 +633,7 @@ function histHtml(){
   return '<div class="hm-wrap"><table class="res"><thead><tr><th>Data</th><th>Stygos</th><th>Teisingai</th><th>Vid. laikas</th></tr></thead><tbody>'+H.map(x=>`<tr><td class="mono">${x.d.slice(5)}</td><td>${x.strings.join(", ")}</td><td class="mono">${x.first}/${x.n}</td><td class="mono">${x.avg.toFixed(1)} s${x.avg===best?' <span class="pill">geriausias</span>':''}</td></tr>`).join('')+'</tbody></table></div>';
 }
 function tog(on){return on?'style="border-color:var(--accent);color:var(--accent)" aria-pressed="true"':'aria-pressed="false"';}
-function renderEar(){
+function renderEarMic(){
   const v=document.getElementById("v-ear");const c=trCfg();const R=P.round;
   if(R&&!R.inline){
     v.innerHTML=`<div class="head"><span class="eyebrow">Grifo natos · <span id="trProg"></span></span></div>
@@ -1275,6 +1293,89 @@ function earTodayHtml(ex){
      <button class="btn ${m===ex.eartr?'primary':''}" data-earsess="${m}" data-exid="${ex.id}">${H.length?'Dar viena sesija':'Pradėti sesiją'} (${eSt().len} klausimų)</button></div>`;}).join('')}
    <span class="muted" style="font-size:.85rem">Sesija atsidarys „Klausa“ skiltyje. Ją baigus, pratimas bus pažymėtas atliktu.</span></div>`;
 }
+
+/* ---------- grifo žaidimas ekrane ---------- */
+const FG={active:false,target:null,t0:0,score:0,streak:0,i:0,first:0,wrong:0,times:[],res:null,lock:false,flash:{},reveal:false,tIv:null};
+function fgCfg(){if(!S.fg)S.fg={strings:[6,5],notes:"natural",maxFret:12,n:20,labels:false};return S.fg;}
+function fgPoolNotes(){const c=fgCfg();const set=new Set();c.strings.forEach(s=>{for(let fr=0;fr<=c.maxFret;fr++){const n=NOTES[(STR_MIDI[s]+fr)%12];if(c.notes==="all"||NATURAL.includes(n))set.add(n);}});return [...set];}
+function fgKey(){const c=fgCfg();return c.strings.slice().sort().join("")+"|"+c.notes+"|"+c.maxFret;}
+function fgBest(){const H=(S.fgHist||[]).filter(x=>x.key===fgKey());return H.length?Math.max(...H.map(x=>x.score)):0;}
+function fgStart(){const pool=fgPoolNotes();if(!pool.length){toast("Pasirinkite bent vieną stygą.");return;}ac();Object.assign(FG,{active:true,score:0,streak:0,i:0,first:0,wrong:0,times:[],res:null,flash:{},target:null,started:Date.now()});fgNext();clearInterval(FG.tIv);FG.tIv=setInterval(fgClock,100);}
+function fgNext(){const pool=fgPoolNotes();let n;do{n=rnd(pool);}while(pool.length>1&&n===FG.target);FG.target=n;FG.t0=performance.now();FG.wrongThis=0;FG.reveal=false;FG.lock=false;FG.flash={};renderEar();}
+function fgPositions(n){const c=fgCfg();const out=[];c.strings.forEach(s=>{for(let fr=0;fr<=c.maxFret;fr++)if(NOTES[(STR_MIDI[s]+fr)%12]===n)out.push(s+":"+fr);});return out;}
+function fgTap(s,fr){
+  if(!FG.active||FG.lock)return;const c=fgCfg();if(!c.strings.includes(s)||fr>c.maxFret)return;
+  const n=NOTES[(STR_MIDI[s]+fr)%12];const k=s+":"+fr;
+  if(n===FG.target){const t=(performance.now()-FG.t0)/1000;const mult=1+Math.min(FG.streak,10)*0.1;const pts=Math.round((100+Math.max(0,100-t*20))*mult);
+    FG.score+=pts;FG.streak++;if(!FG.wrongThis)FG.first++;FG.times.push(t);FG.flash={[k]:"good"};FG.lastPts=pts;FG.lock=true;beep(true);FG.i++;renderEar();
+    setTimeout(()=>{if(!FG.active)return;if(FG.i>=c.n)fgEnd();else fgNext();},450);}
+  else{FG.score=Math.max(0,FG.score-25);FG.streak=0;FG.wrongThis++;FG.wrong++;FG.flash[k]="bad";FG.lastPts=-25;beep(false);if(FG.wrongThis>=2)FG.reveal=true;renderEar();}
+}
+function fgSkip(){if(!FG.active||FG.lock)return;FG.streak=0;FG.wrongThis=9;FG.reveal=true;FG.lock=true;FG.i++;FG.lastPts=0;renderEar();setTimeout(()=>{if(!FG.active)return;if(FG.i>=fgCfg().n)fgEnd();else fgNext();},1500);}
+function fgEnd(){
+  clearInterval(FG.tIv);if(!FG.active)return;FG.active=false;const c=fgCfg();const n=FG.i;
+  if(!n){renderEar();return;}
+  const avg=FG.times.length?FG.times.reduce((a,b)=>a+b,0)/FG.times.length:0;const best=fgBest();
+  const r={d:todayStr(),key:fgKey(),strings:c.strings.slice(),notes:c.notes,maxFret:c.maxFret,n,first:FG.first,wrong:FG.wrong,score:FG.score,avg:+avg.toFixed(1),record:FG.score>best};
+  if(!S.fgHist)S.fgHist=[];S.fgHist.push(r);if(S.fgHist.length>300)S.fgHist.shift();FG.res=r;save();if(r.record)chime();renderEar();
+}
+function fgClock(){const el=document.getElementById("fgClock");if(el&&FG.active&&!FG.lock)el.textContent=((performance.now()-FG.t0)/1000).toFixed(1)+" s";}
+function fbHtml(){
+  const c=fgCfg();const pos=FG.reveal?fgPositions(FG.target):[];let h='<div class="fb" role="grid" aria-label="Gitaros grifas"><span></span>';
+  [6,5,4,3,2,1].forEach(s=>h+=`<span class="fbh">${s}</span>`);
+  for(let fr=0;fr<=12;fr++){
+    h+=`<span class="fbn">${fr}${[3,5,7,9].includes(fr)?'<i>•</i>':fr===12?'<i>••</i>':''}</span>`;
+    [6,5,4,3,2,1].forEach((s,si)=>{const on=c.strings.includes(s)&&fr<=c.maxFret;const k=s+":"+fr;const n=NOTES[(STR_MIDI[s]+fr)%12];const fl=FG.flash[k]||(pos.includes(k)?"show":"");
+      const lab=(fl||(c.labels&&on))?n:"";
+      h+=`<button class="fbc ${fr===0?'open':''} ${on?'':'off'} ${fl}" style="--sw:${(1+ (6-si)*0.35).toFixed(2)}px" data-fs="${s}" data-ff="${fr}" ${on?'':'tabindex="-1" aria-disabled="true"'} aria-label="${s} styga, ${fr} skersinė"><span>${lab}</span></button>`;});
+  }
+  return h+'</div>';
+}
+function fgHistHtml(){const H=(S.fgHist||[]).slice(-6).reverse();if(!H.length)return '';
+  return '<h3>Paskutiniai žaidimai</h3><div class="hm-wrap"><table class="res"><thead><tr><th>Data</th><th>Stygos</th><th>Taškai</th><th>Iš pirmo</th><th>Vid.</th></tr></thead><tbody>'+H.map(x=>`<tr><td class="mono">${x.d.slice(5)}</td><td>${x.strings.join(",")}</td><td class="mono"><b>${x.score}</b>${x.record?' <span class="pill">rekordas</span>':''}</td><td class="mono">${x.first}/${x.n}</td><td class="mono">${x.avg} s</td></tr>`).join('')+'</tbody></table></div>';}
+function renderFG(v){
+  const c=fgCfg();
+  if(FG.active){
+    v.innerHTML=`<div class="fgbar"><div><span class="eyebrow">${FG.i+ (FG.lock?0:1)} / ${c.n}</span><div class="fgt">${FG.target}</div></div>
+      <div style="text-align:right"><span class="eyebrow">Taškai</span><div class="mono fgs">${FG.score}</div><span class="mono muted" id="fgClock">0.0 s</span>${FG.streak>1?` <span class="pill">×${(1+Math.min(FG.streak,10)*0.1).toFixed(1)}</span>`:''}</div></div>
+      <p class="muted" style="font-size:.88rem;margin:0">${FG.reveal?`Teisingos vietos pažymėtos. Paspauskite vieną iš jų.`:FG.lastPts<0?'Ne ta nata. Bandykite dar.':'Paspauskite natą <b>'+FG.target+'</b> bet kurioje pažymėtoje stygoje.'}</p>
+      ${fbHtml()}
+      <div class="row"><button class="btn small" id="fgSkip">Nežinau</button><button class="btn small" id="fgStop">Baigti</button></div>`;
+    return;
+  }
+  const R=FG.res;const best=fgBest();
+  v.innerHTML=`<div class="head"><span class="eyebrow">Žaidimas be gitaros</span><h1>Rask natą grife</h1><p class="muted">Programėlė parodo natą, o jūs paspaudžiate ją grife. Greitas teisingas atsakymas duoda iki 200 taškų, serija iš eilės juos padaugina, klaida atima 25.</p></div>
+   ${R?`<div class="metro" style="gap:10px"><span class="eyebrow">Rezultatas</span><div class="bpm">${R.score}</div>${R.record?'<span class="pill">Naujas rekordas!</span>':`<span class="muted">Rekordas: ${best}</span>`}
+     <div class="rgrid"><div class="stat"><b>${R.first}/${R.n}</b><small>iš pirmo karto</small></div><div class="stat"><b>${R.avg} s</b><small>vid. laikas natai</small></div></div></div>`:''}
+   <div class="theory" style="gap:10px">
+    <span class="eyebrow">Stygos</span><div class="row" style="justify-content:flex-start">${[6,5,4,3,2,1].map(s=>`<button class="btn small" data-fgs="${s}" ${tog(c.strings.includes(s))}>${s}</button>`).join('')}</div>
+    <span class="eyebrow">Natos</span><div class="row" style="justify-content:flex-start"><button class="btn small" data-fgn="natural" ${tog(c.notes==='natural')}>Be diezų</button><button class="btn small" data-fgn="all" ${tog(c.notes==='all')}>Visos 12</button></div>
+    <span class="eyebrow">Skersinės</span><div class="row" style="justify-content:flex-start"><button class="btn small" data-fgf="5" ${tog(c.maxFret===5)}>0–5</button><button class="btn small" data-fgf="12" ${tog(c.maxFret===12)}>0–12</button></div>
+    <span class="eyebrow">Natų skaičius</span><div class="row" style="justify-content:flex-start">${[10,20,30].map(n=>`<button class="btn small" data-fgl="${n}" ${tog(c.n===n)}>${n}</button>`).join('')}</div>
+    <span class="eyebrow">Mokymosi režimas</span><div class="row" style="justify-content:flex-start"><button class="btn small" data-fglab="1" ${tog(c.labels)}>${c.labels?'Natų pavadinimai rodomi':'Natų pavadinimai paslėpti'}</button></div>
+    <span class="muted" style="font-size:.88rem">Natos šiame žaidime: ${fgPoolNotes().join(" ")}${best?` · rekordas su šiais nustatymais: <b>${best}</b>`:''}</span>
+    <button class="btn primary" id="fgStart">${R?'Žaisti dar kartą':'Pradėti'}</button></div>
+   ${fgHistHtml()}`;
+}
+function fgClick(t){
+  if(t.dataset.fs){fgTap(+t.dataset.fs,+t.dataset.ff);return true;}
+  if(t.id==="fgStart"){fgStart();return true;}
+  if(t.id==="fgSkip"){fgSkip();return true;}
+  if(t.id==="fgStop"){fgEnd();return true;}
+  const c=fgCfg();
+  if(t.dataset.fgs){const s=+t.dataset.fgs;c.strings=c.strings.includes(s)?c.strings.filter(x=>x!==s):[...c.strings,s];save();renderEar();return true;}
+  if(t.dataset.fgn){c.notes=t.dataset.fgn;save();renderEar();return true;}
+  if(t.dataset.fgf){c.maxFret=+t.dataset.fgf;save();renderEar();return true;}
+  if(t.dataset.fgl){c.n=+t.dataset.fgl;save();renderEar();return true;}
+  if(t.dataset.fglab){c.labels=!c.labels;save();renderEar();return true;}
+  if(t.dataset.grmode){if(FG.active)fgEnd();S.grMode=t.dataset.grmode;save();renderEar();return true;}
+  return false;
+}
+
+function renderEar(){const v=document.getElementById("v-ear");if(P.round&&!P.round.inline){renderEarMic();return;}
+  if(S.grMode==="game")renderFG(v);else renderEarMic();
+  if(!FG.active)v.insertAdjacentHTML("afterbegin",`<div class="row" style="justify-content:flex-start"><button class="btn small" data-grmode="mic" ${tog(S.grMode!=="game")}>Su gitara (mikrofonas)</button><button class="btn small" data-grmode="game" ${tog(S.grMode==="game")}>Žaidimas ekrane</button></div>`);}
+
 function renderAll(){renderToday();renderGoals();renderTheory();renderMetro();if(!P.round)renderEar();renderEarTrain();renderCal();}
 function render(){renderAll();}
 renderAll();
