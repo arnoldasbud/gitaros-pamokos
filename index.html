@@ -391,12 +391,15 @@ function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;","
 
 /* ---------- views ---------- */
 function stageHeader(){
-  const p=PHASES[S.phase];const day=Math.min(14,daysBetween(S.phaseStart,todayStr())+1);
-  return `<div class="head"><span class="eyebrow">${S.phase+1} etapas iš ${PHASES.length} · ${day}-a diena iš 14</span><h1>${esc(p.title)}</h1><p class="muted">${esc(p.focus)}</p></div>`;
+  const p=PHASES[S.phase];const day=practiceDay();
+  return `<div class="head"><span class="eyebrow">${S.phase+1} etapas iš ${PHASES.length} · ${day}-a pratybų diena iš ~14</span><h1>${esc(p.title)}</h1><p class="muted">${esc(p.focus)}</p></div>`;
 }
+function practicedDays(){return Object.keys(S.done||{}).filter(d=>d>=S.phaseStart&&(S.done[d]||[]).some(id=>id!=="eartr")).sort();}
+function practiceDay(){const t=todayStr();const p=practicedDays();return p.filter(d=>d<t).length+1;}
 function fretStrip(){
   let h='<div class="fret" aria-label="14 etapo dienų">';
-  for(let i=0;i<14;i++){const d=new Date(S.phaseStart+"T12:00:00");d.setDate(d.getDate()+i);const k=todayStr(d);const on=(S.log[k]||0)>=60;const inl=[2,4,6,8,11].includes(i);h+=`<span class="${on?'on ':''}${k===todayStr()?'today ':''}${inl?'inlay':''}" title="${k}"></span>`;}
+  const done=practicedDays();const cur=practiceDay()-1;
+  for(let i=0;i<Math.max(14,cur+1);i++){const on=i<done.length;const inl=[2,4,6,8,11].includes(i);h+=`<span class="${on?'on ':''}${i===cur?'today ':''}${inl?'inlay':''}" title="${on?done[i]:''}"></span>`;}
   return h+'</div>';
 }
 function statsHtml(){
@@ -432,7 +435,7 @@ function renderToday(){
 
 let confirmNext=false;
 function renderGoals(){
-  const v=document.getElementById("v-goals");const p=PHASES[S.phase];const g=phaseGoals();const day=daysBetween(S.phaseStart,todayStr())+1;
+  const v=document.getElementById("v-goals");const p=PHASES[S.phase];const g=phaseGoals();const day=practiceDay();
   const all=p.goals.every((_,i)=>g[i]);const last=S.phase===PHASES.length-1;
   let h=`<div class="head"><span class="eyebrow">${S.phase+1} etapo tikslai</span><h1>Ką turiu mokėti</h1><p class="muted">Pažymėkite tikslą tik tada, kai jį pasiekiate 3 dienas iš eilės. Kai pasieksite visus, atsivers kitas etapas. Jei prireiks daugiau nei 2 savaičių, tai visiškai normalu.</p></div>`;
   p.goals.forEach((t,i)=>{h+=`<div class="goal"><input type="checkbox" id="g${S.phase}_${i}" data-goal="${i}" ${g[i]?'checked':''}><label for="g${S.phase}_${i}">${esc(t)}</label></div>`;});
@@ -1186,7 +1189,7 @@ function calClick(t){
 
 /* ---------- šiandienos rekomendacijos ---------- */
 function recs(){
-  const out=[];const today=todayStr();const ph=PHASES[S.phase];const day=daysBetween(S.phaseStart,today)+1;
+  const out=[];const today=todayStr();const ph=PHASES[S.phase];const day=practiceDay();
   if(S.phase===0&&day<=3)out.push({k:"Pirštai",t:"Pirmomis dienomis grokite 2 kartus po 10 min. Jei galiukai skauda, sustokite ir tęskite vėliau."});
   const past=Object.keys(S.log).filter(d=>d<today&&S.log[d]>=60).sort();
   if(past.length){const gap=daysBetween(past[past.length-1],today);if(gap>=2)out.push({k:"Grįžimas",t:`Paskutinį kartą grojote prieš ${gap} d. Šiandien pradėkite nuo apšilimo ir 5–10 bpm lėtesnio tempo.`});}
