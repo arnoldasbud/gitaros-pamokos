@@ -575,12 +575,13 @@ function micOff(){P.on=false;cancelAnimationFrame(P.raf);clearInterval(P.tickIv)
 async function startRound(fix){
   if(!cellPool().length){toast("Pasirinkite bent vieną stygą.");return;}
   if(!P.on&&!(await micOn()))return;
-  P.round={items:[],cur:null,len:trCfg().len,started:Date.now(),fixPool:fix?weakCells():null};nextItem();renderEar();
+  P.prevMidi=null;P.round={items:[],cur:null,len:trCfg().len,started:Date.now(),fixPool:fix?weakCells():null};nextItem();renderEar();
   clearInterval(P.tickIv);P.tickIv=setInterval(paintClock,100);
 }
-function nextItem(){const R=P.round;const prev=R.cur?R.cur.cell:null;R.cur={cell:pickCell(prev),t0:performance.now(),wrong:false,hint:false};P.okSince=0;P.badSince=0;P.hist=[];paintRound();}
+function nextItem(){const R=P.round;const prev=R.cur?R.cur.cell:null;R.cur={cell:pickCell(prev),t0:performance.now(),wrong:false,hint:false};P.okSince=0;P.badSince=0;P.needOnset=true;paintRound();}
 function finishItem(ok,skipped){
   const R=P.round;const it=R.cur;const t=(performance.now()-it.t0)/1000;
+  if(ok&&P.lastSt)P.prevMidi=P.lastSt.midi;
   const rec={n:it.cell.n,s:it.cell.s,fr:it.cell.fr,t:+t.toFixed(2),first:ok&&!it.wrong,skip:!!skipped};R.items.push(rec);
   const k=it.cell.s+":"+it.cell.fr;const st=trCells();const r=st[k]||{n:0,sum:0,err:0};
   if(!skipped){r.n++;r.sum+=Math.min(t,15);}if(it.wrong||skipped)r.err++;st[k]=r;
@@ -605,6 +606,9 @@ let frameFlip=false;
 function loop(){
   if(!P.on)return;P.raf=requestAnimationFrame(loop);if(CAL.active){calFrame();return;}if(RM.active){if(P.anLow)rhythmFrame();return;}if(CH2.active){chordFrame();return;}frameFlip=!frameFlip;if(frameFlip)return;
   P.an.getFloatTimeDomainData(P.buf);const f=detectPitch(P.buf,AC.sampleRate);
+  {let r=0;const b=P.buf;for(let i=0;i<b.length;i+=2)r+=b[i]*b[i];r=Math.sqrt(2*r/b.length);P.rfl=P.rfl||[];const fl=P.rfl.length?Math.min(...P.rfl):r;P.rfl.push(r);if(P.rfl.length>6)P.rfl.shift();
+   // naujas užgavimas: garsas staiga išauga virš ankstesnio lygio
+   if(P.needOnset&&r>0.012&&r>fl*1.8){P.needOnset=false;P.hist=[];}}
   P.hist.push(f<0?null:noteFromFreq(f));if(P.hist.length>5)P.hist.shift();
   const vals=P.hist.filter(Boolean);let st=null;
   if(vals.length>=3){const cnt={};vals.forEach(v=>cnt[v.midi]=(cnt[v.midi]||0)+1);const top=Object.keys(cnt).sort((x,y)=>cnt[y]-cnt[x])[0];if(cnt[top]>=3)st=vals.filter(v=>v.midi==top).pop();}
@@ -613,8 +617,11 @@ function loop(){
   const R=P.round;const heard=document.getElementById("trHeard");
   if(heard)heard.textContent=st?"Girdžiu: "+st.name+st.oct:(P.on?"Klausau…":"");
   if(!R||!R.cur||R.cur.done||!st){if(!st){P.okSince=0;P.badSince=0;}return;}
-  const now=performance.now();
+  const now=performance.now();P.lastSt=st;
+  // kol nėra naujo užgavimo arba girdime ankstesnę natą, klaidos neskaičiuojame
+  const stale=P.needOnset||(P.prevMidi!=null&&st.midi%12===P.prevMidi%12&&now-R.cur.t0<2500);
   if(accepts(R.cur.cell,st.midi)){P.badSince=0;if(heard)heard.className="heard good";if(!P.okSince)P.okSince=now;else if(now-P.okSince>200)finishItem(true,false);}
+  else if(stale){P.okSince=0;P.badSince=0;if(heard){heard.className="heard";heard.textContent="Girdžiu: "+st.name+st.oct+" (ankstesnė nata, užgaukite naują)";}}
   else{P.okSince=0;if(heard)heard.className="heard bad";if(!P.badSince)P.badSince=now;else if(now-P.badSince>350&&!R.cur.wrong){R.cur.wrong=true;beep(false);paintRound();}}
 }
 function paintClock(){const R=P.round;const el=document.getElementById("trClock");if(!R||!R.cur||!el)return;if(R.cur.done)return;const t=(performance.now()-R.cur.t0)/1000;el.textContent=t.toFixed(1)+" s";
@@ -674,7 +681,7 @@ function renderEarMic(){
 }
 async function startInline(){
   if(P.round)return;
-  const fs=focusStrings();P.round={items:[],cur:null,len:999,started:Date.now(),inline:true,manual:false,focus:fs,fixPool:cellsFor(fs)};P.lastRes=null;
+  const fs=focusStrings();P.prevMidi=null;P.round={items:[],cur:null,len:999,started:Date.now(),inline:true,manual:false,focus:fs,fixPool:cellsFor(fs)};P.lastRes=null;
   const ok=await micOn();if(!P.round)return;P.round.manual=!ok;
   const db=document.getElementById("drillBox");if(db)db.innerHTML=drillHtml();
   nextItem();clearInterval(P.tickIv);P.tickIv=setInterval(paintClock,100);
