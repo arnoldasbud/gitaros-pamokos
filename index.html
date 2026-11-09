@@ -909,7 +909,7 @@ function earTrainClick(t){
 
 /* ---------- akordų keitimai su kokybės vertinimu ---------- */
 const CHORD_PCS={Em:[4,7,11],Am:[9,0,4],C:[0,4,7],G:[7,11,2],D:[2,6,9],F:[5,9,0],Bm:[11,2,6]};
-const STRICT={lenient:[0.5,0.15,0.4],normal:[0.6,0.25,0.48],strict:[0.7,0.35,0.55]};
+const STRICT={lenient:[0.42,0.12,0.32],normal:[0.5,0.18,0.4],strict:[0.6,0.25,0.48]};
 const STRICT_T={lenient:"Atlaidus",normal:"Vidutinis",strict:"Griežtas"};
 const CH2={active:false,ex:null,pair:null,expect:1,cur:0,changes:0,clean:0,strums:[],t0:0,floor:[],lastOn:0,pendingAt:0,manual:false,last:null,missing:{}};
 function chgCfg(){if(!S.chg)S.chg={pair:{},strict:"normal"};return S.chg;}
@@ -920,7 +920,7 @@ function chroma(){
   for(let i=Math.floor(75/hz);i<Math.min(bins,Math.ceil(1050/hz));i++){const db=P.fbuf[i];if(!isFinite(db))continue;const p=Math.pow(10,db/10);const m=69+12*Math.log2(i*hz/440);const r=Math.round(m);if(Math.abs(m-r)>0.4)continue;c[((r%12)+12)%12]+=p;}
   let s=0;for(let i=0;i<12;i++)s+=c[i];if(s<=0)return null;for(let i=0;i<12;i++)c[i]/=s;return c;
 }
-const CALTH={lenient:[0.8,0.3,0.7],normal:[0.88,0.4,0.78],strict:[0.93,0.5,0.85]};
+const CALTH={lenient:[0.75,0.25,0.62],normal:[0.83,0.33,0.7],strict:[0.9,0.45,0.8]};
 function calChord(n){return S.cal&&S.cal.chords&&S.cal.chords[n];}
 function judge(ch,name){const c=calChord(name);const g=judgeGeneric(ch,name);if(!c)return {pur:g.pur,miss:g.miss,th:STRICT[chgCfg().strict]};
   const thr=CALTH[chgCfg().strict];const sim=cosSim(ch,c.t);const t=CHORD_PCS[name];const miss=t.filter(p=>c.t[p]>0.03&&ch[p]/c.t[p]<thr[1]).map(p=>NOTES[p]);return {pur:sim,miss,th:thr};}
@@ -929,7 +929,7 @@ function judgeGeneric(ch,name){const t=CHORD_PCS[name];const h=[...new Set(t.map
 function chordFrame(){
   P.an.getFloatTimeDomainData(P.buf);let rms=0;for(let i=0;i<P.buf.length;i++)rms+=P.buf[i]*P.buf[i];rms=Math.sqrt(rms/P.buf.length);
   const now=performance.now();const fl=CH2.floor;fl.push(rms);if(fl.length>8)fl.shift();const floor=Math.min(...fl);
-  if(!CH2.pendingAt&&now-CH2.lastOn>280&&rms>Math.max(0.015,((S.cal&&S.cal.noise)||0)*3)&&rms>floor*2.2){CH2.lastOn=now;CH2.pendingAt=now+140;}
+  if(!CH2.pendingAt&&now-CH2.lastOn>280&&rms>Math.max(0.015,((S.cal&&S.cal.noise)||0)*3)&&rms>floor*2.2){CH2.lastOn=now;CH2.pendingAt=now+300;}
   if(CH2.pendingAt&&now>=CH2.pendingAt){CH2.pendingAt=0;const ch=chroma();if(ch)onStrum(ch);}
 }
 function onStrum(ch){
@@ -1009,7 +1009,7 @@ async function startRhythm(ex){
 function rhythmFrame(){
   const a=AC;P.anLow.getFloatTimeDomainData(P.lbuf);let rms=0;for(let i=0;i<512;i++)rms+=P.lbuf[i]*P.lbuf[i];rms=Math.sqrt(rms/512);
   const fl=RM.floor;fl.push(rms);if(fl.length>6)fl.shift();const floor=Math.min(...fl);const t=a.currentTime;
-  if(RM.pend){const p=RM.pend;if(rms>p.peak){p.peak=rms;p.peakT=t;}if(t>=p.t+0.15){RM.pend=null;finishStrum(p);}return;}
+  if(RM.pend){const p=RM.pend;if(rms>p.peak){p.peak=rms;p.peakT=t;}if(t>=p.t+0.3){RM.pend=null;finishStrum(p);}return;}
   if(rms>Math.max(0.01,((S.cal&&S.cal.noiseLow)||0)*3)&&rms>floor*2&&t-RM.lastOn>0.18){RM.lastOn=t;RM.pend={t:t-0.006-(a.baseLatency||0),peak:rms,peakT:t};}
 }
 function brightness(){const an=P.an2,hz=AC.sampleRate/an.fftSize;let lo=0,hi=0;for(let i=Math.floor(75/hz);i<Math.ceil(2400/hz);i++){const db=P.fbuf[i];if(!isFinite(db))continue;const p=Math.pow(10,db/10);if(i*hz<1000)lo+=p;else hi+=p;}return lo>0?hi/lo:0;}
@@ -1118,7 +1118,7 @@ function lowRms(){P.anLow.getFloatTimeDomainData(P.lbuf);let r=0;for(let i=0;i<5
 function fullRms(){P.an.getFloatTimeDomainData(P.buf);let r=0;for(let i=0;i<P.buf.length;i++)r+=P.buf[i]*P.buf[i];return Math.sqrt(r/P.buf.length);}
 async function calStart(step,target){
   if(CAL.active)calStop();
-  Object.assign(CAL,{step,target,got:[],pend:null,floor:[],lastOn:0,noiseAcc:[],msg:"",t0:performance.now()});
+  Object.assign(CAL,{lv:null,rejects:0,lastRaw:null,step,target,got:[],pend:null,floor:[],lastOn:0,noiseAcc:[],msg:"",t0:performance.now()});
   const ok=await micOn();if(!ok){renderCal();return;}ensureAnalysers();CAL.active=true;CAL.t0=performance.now();renderCal();
 }
 function calStop(){CAL.active=false;CAL.step=null;CAL.target=null;micOff();P.an2=null;P.anLow=null;}
@@ -1127,7 +1127,7 @@ function calFrame(){
   if(CAL.step==="noise"){CAL.noiseAcc.push([fullRms(),low]);if(now-CAL.t0>2500){const f=CAL.noiseAcc.map(x=>x[0]).sort((a,b)=>a-b),l=CAL.noiseAcc.map(x=>x[1]).sort((a,b)=>a-b);const c=calData();c.noise=f[Math.floor(f.length*0.9)];c.noiseLow=l[Math.floor(l.length*0.9)];save();
     const loud=c.noise>0.02;calStop();CAL.msg=loud?"Aplinkoje gana triukšminga. Matavimai veiks, bet tyliau bus tiksliau.":"Tyla užfiksuota.";renderCal();}return;}
   const fl=CAL.floor;fl.push(low);if(fl.length>6)fl.shift();const floor=Math.min(...fl);
-  if(CAL.pend){const p=CAL.pend;if(low>p.peak){p.peak=low;p.peakT=now;}const isS=CAL.step==="string";if(isS&&now>=p.t+150){P.an.getFloatTimeDomainData(P.buf);const ff=detectPitch(P.buf,AC.sampleRate);if(ff>0)(p.fs=p.fs||[]).push(ff);if(!p.ch){p.ch=chroma();p.br=brightness();}}if(now>=p.t+(isS?750:160)){CAL.pend=null;calStrum(p);}return;}
+  if(CAL.pend){const p=CAL.pend;if(low>p.peak){p.peak=low;p.peakT=now;}const isS=CAL.step==="string";if(isS&&now>=p.t+150){P.an.getFloatTimeDomainData(P.buf);const ff=detectPitch(P.buf,AC.sampleRate);if(ff>0)(p.fs=p.fs||[]).push(ff);if(!p.ch){p.ch=chroma();p.br=brightness();}}if(now>=p.t+(isS?750:300)){CAL.pend=null;calStrum(p);}return;}
   const thr=Math.max(0.01,(calData().noiseLow||0)*3);
   if(low>thr&&low>floor*2&&now-CAL.lastOn>350){CAL.lastOn=now;CAL.pend={t:now,peak:low,peakT:now};}
 }
@@ -1146,15 +1146,18 @@ function calStrum(p){
   }
   if(CAL.step==="chord"){
     if(!ch){CAL.msg="Garsas per tylus. Braukite stipriau arba padėkite telefoną arčiau.";renderCal();return;}
-    const g=judgeGeneric(ch,CAL.target);
-    if(g.pur<0.55||g.miss.length){CAL.msg=g.miss.length?`Neskamba ${g.miss.join(", ")}. Patikrinkite pirštą, spaudžiantį šią natą, ir braukite dar kartą.`:"Akordas skamba neaiškiai. Pabandykite dar kartą, lėtai ir švariai.";renderCal();return;}
-    CAL.got.push({ch:Array.from(ch),peak:p.peak,br,rise:Math.max(0,p.peakT-p.t)/1000});
+    const g=judgeGeneric(ch,CAL.target);const tn=CHORD_PCS[CAL.target];const mx=Math.max(...tn.map(q=>ch[q]));
+    CAL.lv=tn.map(q=>[NOTES[q],Math.round(100*ch[q]/mx)]);CAL.pur=Math.round(g.pur*100);
+    const raw={ch:Array.from(ch),peak:p.peak,br,rise:Math.max(0,p.peakT-p.t)/1000};
+    const miss=tn.filter(q=>ch[q]/mx<0.15).map(q=>NOTES[q]);
+    if(g.pur<0.42||miss.length){CAL.rejects=(CAL.rejects||0)+1;CAL.lastRaw=raw;CAL.msg=miss.length?`Neskamba ${miss.join(", ")}. Patikrinkite pirštą, spaudžiantį šią natą, ir braukite dar kartą.`:"Akordas skamba neaiškiai (daug pašalinių garsų). Pabandykite dar kartą, lėtai ir švariai.";renderCal();return;}
+    CAL.rejects=0;CAL.got.push(raw);
     CAL.msg=`Švarus braukimas ${CAL.got.length} iš 3.`;
     if(CAL.got.length>=3){
       const G=CAL.got;const simAvg=G.map((x,i)=>G.reduce((a,y,j)=>a+(i===j?0:cosSim(x.ch,y.ch)),0)/2);const pk=G.map(x=>x.peak);const pmed=pk.slice().sort((a,b)=>a-b)[1];
       const worstS=simAvg.indexOf(Math.min(...simAvg));const worstP=pk.map(x=>Math.abs(Math.log(x/pmed))).reduce((bi,v,i,arr)=>v>arr[bi]?i:bi,0);
-      if(Math.min(...simAvg)<0.9){G.splice(worstS,1);CAL.msg="Vienas braukimas skambėjo kitaip nei kiti, todėl jis atmestas. Perbraukite dar kartą taip pat, kaip ankstesnius.";renderCal();return;}
-      if(Math.max(...pk)/Math.min(...pk)>1.6){G.splice(worstP,1);CAL.msg="Vienas braukimas buvo daug "+(pk[worstP]>pmed?"stipresnis":"silpnesnis")+" už kitus, todėl jis atmestas. Braukite savo įprastu stiprumu.";renderCal();return;}
+      if(Math.min(...simAvg)<0.8){G.splice(worstS,1);CAL.msg="Vienas braukimas skambėjo kitaip nei kiti, todėl jis atmestas. Perbraukite dar kartą taip pat, kaip ankstesnius.";renderCal();return;}
+      if(Math.max(...pk)/Math.min(...pk)>2.2){G.splice(worstP,1);CAL.msg="Vienas braukimas buvo daug "+(pk[worstP]>pmed?"stipresnis":"silpnesnis")+" už kitus, todėl jis atmestas. Braukite savo įprastu stiprumu.";renderCal();return;}
       const t=new Array(12).fill(0);CAL.got.forEach(x=>x.ch.forEach((v,i)=>t[i]+=v/3));
       const avg=k=>CAL.got.reduce((a,x)=>a+x[k],0)/3;c.chords[CAL.target]={t,peak:avg("peak"),br:avg("br"),rise:avg("rise"),d:todayStr()};save();
       const nm=CAL.target;calStop();CAL.msg=`${nm} įrašytas kaip jūsų etalonas.`;}
@@ -1169,7 +1172,7 @@ function renderCal(){
   const chs=CAL_CHORDS.map(n=>{const r=c.chords[n];const live=CAL.active&&CAL.step==="chord"&&CAL.target===n;return `<button class="btn small calb ${r?'okc':''} ${live?'live':''}" data-calc="${n}">${n}${r?'<small>✓</small>':''}${live?`<small>${CAL.got.length}/3</small>`:''}</button>`;}).join('');
   const live=CAL.active?(CAL.step==="noise"?'Matuojama tyla… Nieko negrokite.':CAL.step==="string"?`Užgaukite ${CAL.target} stygą ir leiskite skambėti.`:`Braukite ${CAL.target} akordą švariai, po vieną braukimą. Reikia 3 švarių.`):'';
   v.innerHTML=`<div class="head"><span class="eyebrow">Gitaros pritaikymas</span><h1>Jūsų gitaros etalonas</h1><p class="muted">Įrašykite, kaip skamba jūsų gitara jūsų kambaryje. Vėliau visi pratimai lyginami su šiais įrašais, todėl matavimai tikslesni. Telefoną padėkite toje vietoje, kur jis bus pratybų metu.</p></div>
-   ${live||CAL.msg?`<div class="note stack" style="gap:6px">${live?`<b>${live}</b>`:''}${CAL.msg?`<span>${esc(CAL.msg)}</span>`:''}${CAL.msg2&&!CAL.active?`<span class="muted">${esc(CAL.msg2)}</span>`:''}${CAL.active?'<button class="btn small" id="calCancel" style="align-self:flex-start">Atšaukti</button>':''}</div>`:''}
+   ${live||CAL.msg?`<div class="note stack" style="gap:6px">${live?`<b>${live}</b>`:''}${CAL.msg?`<span>${esc(CAL.msg)}</span>`:''}${CAL.active&&CAL.step==='chord'&&CAL.lv?`<span class="muted" style="font-size:.88rem">Paskutinis braukimas: ${CAL.lv.map(([n,v])=>`${n} ${v}%`).join(' · ')}, akordo grynumas ${CAL.pur}%</span>`:''}${CAL.active&&CAL.step==='chord'&&(CAL.rejects||0)>=3&&CAL.lastRaw?'<button class="btn small" id="calForce" style="align-self:flex-start">Akordas skambėjo gerai, įskaityti</button>':''}${CAL.msg2&&!CAL.active?`<span class="muted">${esc(CAL.msg2)}</span>`:''}${CAL.active?'<button class="btn small" id="calCancel" style="align-self:flex-start">Atšaukti</button>':''}</div>`:''}
    <div class="theory" style="gap:10px"><h3>1. Tyla ${c.noise!=null?'<span class="pill">atlikta</span>':''}</h3><p class="muted">2,5 s išmatuojamas kambario triukšmas, kad programėlė neklaidintų jo su gitara.</p><button class="btn small" id="calNoise" style="align-self:flex-start">${c.noise!=null?'Matuoti iš naujo':'Matuoti tylą'}</button></div>
    <div class="theory" style="gap:10px"><h3>2. Atviros stygos</h3><p class="muted">Užgaukite kiekvieną stygą atskirai. Programėlė patikrins derinimą (¢ = centai, iki ±12 yra gerai) ir įsimins garsumą bei tembrą.</p><div class="row" style="justify-content:flex-start">${strs}</div></div>
    <div class="theory" style="gap:10px"><h3>3. Akordai</h3><p class="muted">Pasirinkite akordą ir 3 kartus švariai perbraukite normaliu stiprumu. Nešvarius braukimus programėlė atmes ir pasakys, kuri nata neskamba. Įrašykite tuos akordus, kuriuos jau mokate. Kitus įrašysite, kai išmoksite.</p><div class="row" style="justify-content:flex-start">${chs}</div></div>
@@ -1180,6 +1183,7 @@ function calClick(t){
   if(t.id==="calNoise"){calStart("noise",null);return true;}
   if(t.dataset.cals){CAL.msg2="";calStart("string",+t.dataset.cals);return true;}
   if(t.dataset.calc){CAL.msg2="";calStart("chord",t.dataset.calc);return true;}
+  if(t.id==="calForce"){if(CAL.lastRaw&&CAL.active){CAL.got.push(CAL.lastRaw);CAL.lastRaw=null;CAL.rejects=0;CAL.msg=`Įskaityta ${CAL.got.length} iš 3.`;if(CAL.got.length>=3){const G=CAL.got;const t2=new Array(12).fill(0);G.forEach(x=>x.ch.forEach((v,i)=>t2[i]+=v/3));const avg=k=>G.reduce((a,x)=>a+x[k],0)/3;calData().chords[CAL.target]={t:t2,peak:avg("peak"),br:avg("br"),rise:avg("rise"),d:todayStr()};save();const nm=CAL.target;calStop();CAL.msg=`${nm} įrašytas kaip jūsų etalonas.`;}renderCal();}return true;}
   if(t.id==="calCancel"){calStop();CAL.msg="";renderCal();return true;}
   if(t.id==="calOpen"){CAL.msg="";renderCal();show("cal");return true;}
   if(t.id==="calBack"){if(CAL.active)calStop();show("today");return true;}
