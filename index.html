@@ -1005,24 +1005,39 @@ function rmSched(){
 }
 async function startRhythm(ex){
   if(RM.active)return;if(M.running)stopM();const c=rmCfg();
-  Object.assign(RM,{active:true,ex,pair:chgPair(ex),bpm:c.rbpm,per:c.rper,strums:[],floor:[],lastOn:0,pend:null,last:null,result:null,curBeat:-5});
+  Object.assign(RM,{active:true,ex,pair:chgPair(ex),bpm:c.rbpm,per:c.rper,strums:[],floor:[],lastOn:0,pend:null,last:null,result:null,curBeat:-5,clk:[],lastClk:0,lat:S.rmLat||0,latDone:false});
   const ok=await micOn();if(!RM.active){if(ok)micOff();return;}
   if(!ok){RM.active=false;toast("Ritmo analizei reikia mikrofono.");paintChg();return;}
   const a=AC;const lp1=a.createBiquadFilter(),lp2=a.createBiquadFilter();lp1.type=lp2.type="lowpass";lp1.frequency.value=lp2.frequency.value=900;
   P.anLow=a.createAnalyser();P.anLow.fftSize=512;P.src.connect(lp1);lp1.connect(lp2);lp2.connect(P.anLow);P.lbuf=new Float32Array(512);
   P.an2=a.createAnalyser();P.an2.fftSize=8192;P.an2.smoothingTimeConstant=0;P.src.connect(P.an2);P.fbuf=new Float32Array(P.an2.frequencyBinCount);
+  // metronomo spragsėjimo girdėjimas per mikrofoną: išmatuojame telefono garso vėlavimą
+  const hp1=a.createBiquadFilter(),hp2=a.createBiquadFilter();hp1.type=hp2.type="highpass";hp1.frequency.value=hp2.frequency.value=2400;P.anHi=a.createAnalyser();P.anHi.fftSize=2048;P.src.connect(hp1);hp1.connect(hp2);hp2.connect(P.anHi);P.hbuf=new Float32Array(2048);
   RM.beat=-4;RM.nextT=a.currentTime+0.25;RM.start=RM.nextT+4*rmBeatDur();clearInterval(RM.iv);RM.iv=setInterval(rmSched,25);paintChg();
 }
 function rhythmFrame(){
   const a=AC;P.anLow.getFloatTimeDomainData(P.lbuf);let rms=0;for(let i=0;i<512;i++)rms+=P.lbuf[i]*P.lbuf[i];rms=Math.sqrt(rms/512);
   const fl=RM.floor;fl.push(rms);if(fl.length>6)fl.shift();const floor=Math.min(...fl);const t=a.currentTime;
+  if(P.anHi&&t<RM.start)rmHearClick(t);
   if(RM.pend){const p=RM.pend;if(rms>p.peak){p.peak=rms;p.peakT=t;}if(t>=p.t+0.3){RM.pend=null;finishStrum(p);}return;}
   if(rms>Math.max(0.01,((S.cal&&S.cal.noiseLow)||0)*3)&&rms>floor*2&&t-RM.lastOn>0.18){RM.lastOn=t;RM.pend={t:t-0.006-(a.baseLatency||0),peak:rms,peakT:t};}
 }
+function rmHearClick(t){
+  const b=P.hbuf;P.anHi.getFloatTimeDomainData(b);let mx=0;for(let i=0;i<b.length;i++){const v=Math.abs(b[i]);if(v>mx)mx=v;}
+  if(mx<0.004||t-RM.lastClk<0.3)return;let idx=0;while(idx<b.length&&Math.abs(b[idx])<0.3*mx)idx++;
+  const arr=t-(b.length-idx)/AC.sampleRate-(AC.baseLatency||0);const bd=rmBeatDur();
+  const k=Math.round((arr-0.15-RM.start)/bd);const lat=arr-(RM.start+k*bd);
+  if(k<-4||k>-1||lat<0||lat>0.6)return;RM.lastClk=t;RM.clk.push(lat);
+}
+function rmLatency(){
+  if(RM.latDone)return;RM.latDone=true;const c=RM.clk;
+  if(c.length>=2){const m=median(c);const good=c.filter(x=>Math.abs(x-m)<0.03);if(good.length>=2){RM.lat=median(good);RM.latOk=true;S.rmLat=RM.lat;save();return;}}
+  RM.latOk=false;RM.lat=S.rmLat||0;
+}
 function brightness(){const an=P.an2,hz=AC.sampleRate/an.fftSize;let lo=0,hi=0;for(let i=Math.floor(75/hz);i<Math.ceil(2400/hz);i++){const db=P.fbuf[i];if(!isFinite(db))continue;const p=Math.pow(10,db/10);if(i*hz<1000)lo+=p;else hi+=p;}return lo>0?hi/lo:0;}
 function finishStrum(p){
-  const bd=rmBeatDur();const k=Math.round((p.t-RM.start)/bd);if(k<0)return;
-  const off=p.t-(RM.start+k*bd);const ch=chroma();const br=brightness();
+  rmLatency();const bd=rmBeatDur();const pt=p.t-RM.lat;const k=Math.round((pt-RM.start)/bd);if(k<0)return;
+  const off=pt-(RM.start+k*bd);const ch=chroma();const br=brightness();
   let correct=null,miss=[];if(ch){const ja=judge(ch,RM.pair[0]),jb=judge(ch,RM.pair[1]);const exp=rmExpected(k);const je=exp?jb:ja,jo=exp?ja:jb;correct=classify(ch,RM.pair[0],RM.pair[1])===exp;miss=je.miss;}
   const s={k,off,extra:Math.abs(off)>0.42*bd,peak:p.peak,rise:Math.max(0,p.peakT-p.t),br,correct,miss,change:k>0&&k%RM.per===0};
   if(s.correct&&s.miss.length)noteMiss(RM.pair[rmExpected(k)],s.miss);
@@ -1031,7 +1046,7 @@ function finishStrum(p){
 function ltPl(n,a,b,c){const d=n%10,h=n%100;if(d===1&&h!==11)return a;if(d>=2&&d<=9&&!(h>=11&&h<=19))return b;return c;}
 function median(a){if(!a.length)return 0;const b=a.slice().sort((x,y)=>x-y);const m=b.length>>1;return b.length%2?b[m]:(b[m-1]+b[m])/2;}
 function endRhythm(){
-  if(!RM.active)return;RM.active=false;clearInterval(RM.iv);micOff();P.an2=null;P.anLow=null;
+  if(!RM.active)return;RM.active=false;clearInterval(RM.iv);micOff();P.an2=null;P.anLow=null;P.anHi=null;
   const S0=RM.strums.filter(s=>!s.extra);const lastBeat=S0.length?Math.max(...S0.map(s=>s.k)):0;
   if(S0.length>=6){
     const normal=S0.filter(s=>!s.change);const changes=S0.filter(s=>s.change);
@@ -1067,13 +1082,14 @@ function paintRhythmLive(){
   const L=RM.last;const f=box.querySelector("#rmLast");
   if(f&&L){const ms=Math.round(L.off*1000);f.className="heard "+(L.extra?"bad":Math.abs(ms)<=40?"good":"bad");f.textContent=L.extra?"Braukimas tarp tvaksnių":(ms>0?"+"+ms+" ms vėliau":ms<0?ms+" ms anksčiau":"Tiksliai")+(L.change?(L.correct?" · keitimas laiku":" · akordas dar nepakeistas"):"")+(L.miss.length&&L.correct?" · neskamba "+L.miss.join(", "):"");}
   const n=box.querySelector("#rmCount");if(n)n.textContent=RM.strums.filter(s=>!s.extra).length;
+  const lt=box.querySelector("#rmLat");if(lt&&RM.latDone)lt.textContent=RM.latOk?"Telefono garso vėlavimas "+Math.round(RM.lat*1000)+" ms, jis atimamas.":RM.lat?"Vėlavimas neišmatuotas, naudojamas ankstesnis: "+Math.round(RM.lat*1000)+" ms.":"Nepavyko išgirsti metronomo per mikrofoną, vėlavimas neatimamas. Naudokite telefono garsiakalbį, ne ausines.";
 }
 function rhythmHtml(ex){
   const c=rmCfg();
   if(RM.active&&RM.ex&&RM.ex.id===ex.id){
     return `<span class="eyebrow">Ritmiški keitimai · ${RM.bpm} bpm · kas ${RM.per} tv.</span><div class="target" id="rmNow">…</div><div class="strlabel" id="rmNext" style="font-size:1.05rem"></div>
      <div class="beats rbeats">${Array.from({length:RM.per},(_,i)=>`<i class="${i===0?'first':''}"></i>`).join('')}</div>
-     <span class="heard" id="rmLast">Po 4 tvaksnių įžangos braukite žemyn ant kiekvieno tvaksnio</span><span class="muted" style="font-size:.85rem">Braukimų: <b id="rmCount">0</b></span>`;
+     <span class="heard" id="rmLast">Po 4 tvaksnių įžangos braukite žemyn ant kiekvieno tvaksnio</span><span class="muted" style="font-size:.85rem">Braukimų: <b id="rmCount">0</b></span><span class="muted" style="font-size:.8rem" id="rmLat">Įžangos metu matuojamas telefono garso vėlavimas, negrokite.</span>`;
   }
   const bp=[50,60,70,80,90].map(b=>`<button class="btn small" data-rbpm="${b}" ${tog(c.rbpm===b)}>${b}</button>`).join('');
   const pe=[4,2].map(n=>`<button class="btn small" data-rper="${n}" ${tog(c.rper===n)}>kas ${n}</button>`).join('');
