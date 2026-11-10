@@ -1027,7 +1027,7 @@ function rmSched(){
 }
 async function startRhythm(ex){
   if(RM.active)return;if(M.running)stopM();const c=rmCfg();
-  Object.assign(RM,{active:true,ex,pair:chgPair(ex),bpm:c.rbpm,per:c.rper,strums:[],floor:[],lastOn:0,pend:null,last:null,result:null,curBeat:-5,clk:[],lastClk:0,lat:S.rmLat||0,latDone:false});
+  Object.assign(RM,{active:true,ex,pair:chgPair(ex),bpm:c.rbpm,per:c.rper,strums:[],floor:[],lastOn:0,pend:null,last:null,result:null,curBeat:-5,clk:[],lastClk:0,lat:S.rmLat||0,latDone:false,latOk:false,latSrc:null});
   const ok=await micOn();if(!RM.active){if(ok)micOff();return;}
   if(!ok){RM.active=false;toast("Ritmo analizei reikia mikrofono.");paintChg();return;}
   const a=AC;const lp1=a.createBiquadFilter(),lp2=a.createBiquadFilter();lp1.type=lp2.type="lowpass";lp1.frequency.value=lp2.frequency.value=900;
@@ -1071,7 +1071,7 @@ function endRhythm(){
     const refs=RM.pair.map(calChord).filter(Boolean);const calRef=refs.length>0;const refP=calRef?refs.reduce((a,x)=>a+x.peak,0)/refs.length:pm;const loud=pk.filter(x=>x>refP*(calRef?1.6:1.35)).length,soft=pk.filter(x=>x<refP*(calRef?0.55:0.65)).length;
     const bm=calRef?refs.reduce((a,x)=>a+x.br,0)/refs.length:median(S0.map(s=>s.br));const harsh=S0.filter(s=>bm>0&&s.br>bm*1.6).length;
     const rise=Math.round(median(S0.map(s=>s.rise))*1000);
-    const r={d:todayStr(),pair:RM.pair.join("–"),bpm:RM.bpm,per:RM.per,n:S0.length,extra:RM.strums.length-S0.length,onTime:Math.round(100*onTime/S0.length),spread:Math.round(median(dev)*1000),chLate:Math.round(chLate*1000),chLateN,changes:changes.length,chOk,chClean,missed,steady:Math.max(0,Math.round(100-100*sd/mean)),calRef,loud,soft,harsh,rise};
+    const r={d:todayStr(),pair:RM.pair.join("–"),bpm:RM.bpm,per:RM.per,n:S0.length,extra:RM.strums.length-S0.length,onTime:Math.round(100*onTime/S0.length),spread:Math.round(median(dev)*1000),chLate:Math.round(chLate*1000),chLateN,changes:changes.length,chOk,chClean,missed,steady:Math.max(0,Math.round(100-100*sd/mean)),calRef,loud,soft,harsh,rise,lat:Math.round(RM.lat*1000),latSrc:RM.latSrc,rawLate:Math.round(base*1000)};
     const tips=[];
     if(r.missed>Math.max(2,lastBeat*0.1))tips.push("Praleidote "+r.missed+" tvaksnius. Sumažinkite tempą, kad spėtumėte užgauti kiekvieną.");
     if(r.chLateN)tips.push(r.chLateN+" "+ltPl(r.chLateN,"keitimas","keitimai","keitimų")+" pavėlavo (vidutiniškai "+Math.max(0,r.chLate)+" ms). Pradėkite kelti pirštus jau paskutiniame akordo tvaksnyje. Geriau tuščios stygos ant pirmo tvaksnio nei pavėlavęs akordas.");
@@ -1094,7 +1094,7 @@ function paintRhythmLive(){
   const L=RM.last;const f=box.querySelector("#rmLast");
   if(f&&L){const ms=Math.round(L.off*1000);f.className="heard "+(L.extra?"bad":Math.abs(ms)<=40?"good":"bad");f.textContent=L.extra?"Braukimas tarp tvaksnių":(ms>0?"+"+ms+" ms vėliau":ms<0?ms+" ms anksčiau":"Tiksliai")+(L.change?(L.correct?" · keitimas laiku":" · akordas dar nepakeistas"):"")+(L.miss.length&&L.correct?" · neskamba "+L.miss.join(", "):"");}
   const n=box.querySelector("#rmCount");if(n)n.textContent=RM.strums.filter(s=>!s.extra).length;
-  const lt=box.querySelector("#rmLat");if(lt&&RM.latDone)lt.textContent=RM.latOk?"Telefono garso vėlavimas "+Math.round(RM.lat*1000)+" ms, jis atimamas.":RM.lat?"Vėlavimas neišmatuotas, naudojamas ankstesnis: "+Math.round(RM.lat*1000)+" ms.":"Nepavyko išgirsti metronomo per mikrofoną, vėlavimas neatimamas. Naudokite telefono garsiakalbį, ne ausines.";
+  const lt=box.querySelector("#rmLat");if(lt&&RM.latDone)lt.textContent=latText(RM);
 }
 function rhythmHtml(ex){
   const c=rmCfg();
@@ -1114,11 +1114,11 @@ function rhythmHtml(ex){
      <div class="stat"><b>${R.chLate>0?'+':''}${R.chLate} ms</b><small>vid. keitimo vėlavimas</small></div>
      <div class="stat"><b>${R.steady}%</b><small>stiprumo pastovumas</small></div>
      <div class="stat"><b>${R.missed}</b><small>praleisti tvaksniai</small></div>
-     <div class="stat"><b>${R.harsh}</b><small>šiurkštūs braukimai</small></div></div>
+     <div class="stat"><b>${R.harsh}</b><small>šiurkštūs braukimai</small></div></div>${R.lat!=null?`<span class="muted" style="font-size:.82rem">Atimtas telefono vėlavimas ${R.lat} ms${R.latSrc==="none"?" (neišmatuotas)":""}. Po to braukimai vidutiniškai ${R.rawLate>0?"+":""}${R.rawLate} ms nuo spragtelėjimo.${Math.abs(R.rawLate)>80?" Jei jaučiate, kad grojote kartu su spragtelėjimu, išmatuokite vėlavimą skiltyje „Gitaros pritaikymas“.":""}</span>`:''}
      ${R.loud+R.soft?`<span class="muted" style="font-size:.88rem">Per stiprūs: ${R.loud}, per silpni: ${R.soft} (lyginant su ${R.calRef?"jūsų gitaros etalonu":"jūsų vidutiniu braukimu"}). Braukimo trukmė ~${R.rise} ms.</span>`:`<span class="muted" style="font-size:.88rem">Braukimo trukmė ~${R.rise} ms.</span>`}
      <ul class="tips">${R.tips.map(t=>`<li>${esc(t)}</li>`).join('')}</ul>`;
   return `${res}<span class="eyebrow">Tempas (bpm)</span><div class="row">${bp}</div><span class="eyebrow">Keisti akordą</span><div class="row">${pe}</div>
-   <span class="muted" style="font-size:.88rem">Metronomas muša 4 įžangos tvaksnius, tada braukite žemyn ant kiekvieno tvaksnio ir keiskite akordą ties paryškintu tvaksniu. Programėlė matuoja, ar pataikote į tvaksnį, ar keitimai laiku, ar braukimai vienodo stiprumo ir ar neskamba šiurkščiai. Geriausiai veikia su ausinėmis.</span>`;
+   <span class="muted" style="font-size:.88rem">Metronomas muša 4 įžangos tvaksnius, tada braukite žemyn ant kiekvieno tvaksnio ir keiskite akordą ties paryškintu tvaksniu. Programėlė matuoja, ar pataikote į tvaksnį, ar keitimai laiku, ar braukimai vienodo stiprumo ir ar neskamba šiurkščiai. Metronomą leiskite per telefono garsiakalbį, ne per ausines: pagal jį programėlė išmatuoja telefono vėlavimą.</span>`;
 }
 function rhyClick(t){
   if(t.dataset.cmode){rmCfg().mode=t.dataset.cmode;save();paintChg();return true;}
@@ -1153,11 +1153,19 @@ function lowRms(){P.anLow.getFloatTimeDomainData(P.lbuf);let r=0;for(let i=0;i<5
 function fullRms(){P.an.getFloatTimeDomainData(P.buf);let r=0;for(let i=0;i<P.buf.length;i++)r+=P.buf[i]*P.buf[i];return Math.sqrt(r/P.buf.length);}
 async function calStart(step,target){
   if(CAL.active)calStop();
-  Object.assign(CAL,{lv:null,rejects:0,lastRaw:null,step,target,got:[],pend:null,floor:[],lastOn:0,noiseAcc:[],msg:"",t0:performance.now()});
-  const ok=await micOn();if(!ok){renderCal();return;}ensureAnalysers();CAL.active=true;CAL.t0=performance.now();renderCal();
+  Object.assign(CAL,{lv:null,rejects:0,lastRaw:null,lst:null,step,target,got:[],pend:null,floor:[],lastOn:0,noiseAcc:[],msg:"",t0:performance.now()});
+  const ok=await micOn();if(!ok){renderCal();return;}ensureAnalysers();CAL.active=true;CAL.t0=performance.now();
+  if(step==="lat"){const a=AC;const hp1=a.createBiquadFilter(),hp2=a.createBiquadFilter();hp1.type=hp2.type="highpass";hp1.frequency.value=hp2.frequency.value=2400;P.anHi=a.createAnalyser();P.anHi.fftSize=2048;P.src.connect(hp1);hp1.connect(hp2);hp2.connect(P.anHi);P.hbuf=new Float32Array(2048);
+    const st=a.currentTime+0.5;CAL.lst={start:st,clk:[],lastClk:0,bd:0.75};for(let k=0;k<10;k++)rmClick(st+k*0.75,k===0);}
+  renderCal();
 }
-function calStop(){CAL.active=false;CAL.step=null;CAL.target=null;micOff();P.an2=null;P.anLow=null;}
+function calLatFrame(){const L=CAL.lst;const t=AC.currentTime;if(!L||!P.anHi)return;hearClk(L,t,L.bd,0,9);
+  if(t>L.start+10*L.bd+0.7){const c=L.clk;let v=null;if(c.length>=4){const md=median(c);const good=c.filter(x=>Math.abs(x-md)<0.02);if(good.length>=4)v=median(good);}
+    calStop();if(v!=null){S.latCal={v,d:todayStr()};S.rmLat=v;save();CAL.msg=`Telefono vėlavimas ${Math.round(v*1000)} ms. Jis bus atimamas visuose ritmo pratimuose.`;}
+    else CAL.msg="Nepavyko aiškiai išgirsti spragtelėjimų. Padidinkite garsą, nenaudokite ausinių, kambaryje turi būti tylu, ir pakartokite.";renderCal();}}
+function calStop(){CAL.active=false;CAL.step=null;CAL.target=null;micOff();P.an2=null;P.anLow=null;P.anHi=null;}
 function calFrame(){
+  if(CAL.step==="lat"){calLatFrame();return;}
   if(!P.anLow)return;const now=performance.now();const low=lowRms();
   if(CAL.step==="noise"){CAL.noiseAcc.push([fullRms(),low]);if(now-CAL.t0>2500){const f=CAL.noiseAcc.map(x=>x[0]).sort((a,b)=>a-b),l=CAL.noiseAcc.map(x=>x[1]).sort((a,b)=>a-b);const c=calData();c.noise=f[Math.floor(f.length*0.9)];c.noiseLow=l[Math.floor(l.length*0.9)];save();
     const loud=c.noise>0.02;calStop();CAL.msg=loud?"Aplinkoje gana triukšminga. Matavimai veiks, bet tyliau bus tiksliau.":"Tyla užfiksuota.";renderCal();}return;}
@@ -1206,17 +1214,19 @@ function renderCal(){
   const strs=CAL_STRINGS.map(([sn,m,nm])=>{const r=c.strings[sn];const live=CAL.active&&CAL.step==="string"&&CAL.target===sn;
     return `<button class="btn small calb ${r?(Math.abs(r.cents)<=12?'okc':'warnc'):''} ${live?'live':''}" data-cals="${sn}">${sn} ${nm}${r?`<small>${r.cents>0?'+':''}${r.cents}¢</small>`:''}</button>`;}).join('');
   const chs=CAL_CHORDS.map(n=>{const r=c.chords[n];const live=CAL.active&&CAL.step==="chord"&&CAL.target===n;return `<button class="btn small calb ${r?'okc':''} ${live?'live':''}" data-calc="${n}">${n}${r?'<small>✓</small>':''}${live?`<small>${CAL.got.length}/3</small>`:''}</button>`;}).join('');
-  const live=CAL.active?(CAL.step==="noise"?'Matuojama tyla… Nieko negrokite.':CAL.step==="string"?`Užgaukite ${CAL.target} stygą ir leiskite skambėti.`:`Braukite ${CAL.target} akordą švariai, po vieną braukimą. Reikia 3 švarių.`):'';
+  const live=CAL.active?(CAL.step==="lat"?'Matuojamas vėlavimas… Klausykite spragtelėjimų ir negrokite.':CAL.step==="noise"?'Matuojama tyla… Nieko negrokite.':CAL.step==="string"?`Užgaukite ${CAL.target} stygą ir leiskite skambėti.`:`Braukite ${CAL.target} akordą švariai, po vieną braukimą. Reikia 3 švarių.`):'';
   v.innerHTML=`<div class="head"><span class="eyebrow">Gitaros pritaikymas</span><h1>Jūsų gitaros etalonas</h1><p class="muted">Įrašykite, kaip skamba jūsų gitara jūsų kambaryje. Vėliau visi pratimai lyginami su šiais įrašais, todėl matavimai tikslesni. Telefoną padėkite toje vietoje, kur jis bus pratybų metu.</p></div>
    ${live||CAL.msg?`<div class="note stack" style="gap:6px">${live?`<b>${live}</b>`:''}${CAL.msg?`<span>${esc(CAL.msg)}</span>`:''}${CAL.active&&CAL.step==='chord'&&CAL.lv?`<span class="muted" style="font-size:.88rem">Paskutinis braukimas: ${CAL.lv.map(([n,v])=>`${n} ${v}%`).join(' · ')}, akordo grynumas ${CAL.pur}%</span>`:''}${CAL.active&&CAL.step==='chord'&&(CAL.rejects||0)>=3&&CAL.lastRaw?'<button class="btn small" id="calForce" style="align-self:flex-start">Akordas skambėjo gerai, įskaityti</button>':''}${CAL.msg2&&!CAL.active?`<span class="muted">${esc(CAL.msg2)}</span>`:''}${CAL.active?'<button class="btn small" id="calCancel" style="align-self:flex-start">Atšaukti</button>':''}</div>`:''}
    <div class="theory" style="gap:10px"><h3>1. Tyla ${c.noise!=null?'<span class="pill">atlikta</span>':''}</h3><p class="muted">2,5 s išmatuojamas kambario triukšmas, kad programėlė neklaidintų jo su gitara.</p><button class="btn small" id="calNoise" style="align-self:flex-start">${c.noise!=null?'Matuoti iš naujo':'Matuoti tylą'}</button></div>
    <div class="theory" style="gap:10px"><h3>2. Atviros stygos</h3><p class="muted">Užgaukite kiekvieną stygą atskirai. Programėlė patikrins derinimą (¢ = centai, iki ±12 yra gerai) ir įsimins garsumą bei tembrą.</p><div class="row" style="justify-content:flex-start">${strs}</div></div>
-   ${c.reRec&&!Object.keys(c.chords).length?`<div class="note">Akordų vertinimas patobulintas, todėl seni akordų įrašai ištrinti. Įrašykite akordus iš naujo, dabar tai turėtų pavykti lengviau.</div>`:''}<div class="theory" style="gap:10px"><h3>3. Akordai</h3><p class="muted">Pasirinkite akordą ir 3 kartus švariai perbraukite normaliu stiprumu. Nešvarius braukimus programėlė atmes ir pasakys, kuri nata neskamba. Įrašykite tuos akordus, kuriuos jau mokate. Kitus įrašysite, kai išmoksite.</p><div class="row" style="justify-content:flex-start">${chs}</div></div>
+   ${c.reRec&&!Object.keys(c.chords).length?`<div class="note">Akordų vertinimas patobulintas, todėl seni akordų įrašai ištrinti. Įrašykite akordus iš naujo, dabar tai turėtų pavykti lengviau.</div>`:''}<div class="theory" style="gap:10px"><h3>Telefono vėlavimas ${S.latCal?`<span class="pill">${Math.round(S.latCal.v*1000)} ms</span>`:''}</h3><p class="muted">Telefonas leidžia ir girdi garsą su delsa, todėl braukimai atrodo pavėlavę, nors grojate laiku. Programėlė paleis 10 spragtelėjimų ir išmatuos delsą. Negrokite, telefoną laikykite pratybų vietoje, ausinių nenaudokite.</p><div class="row" style="justify-content:flex-start"><button class="btn small" id="calLat">${S.latCal?'Matuoti iš naujo':'Matuoti vėlavimą'}</button>${S.latCal?`<button class="btn small" data-callat="-10">−10 ms</button><button class="btn small" data-callat="10">+10 ms</button>`:''}</div>${S.latCal?`<span class="muted" style="font-size:.82rem">Jei braukimai vis tiek rodomi vėluojantys, nors grojate kartu su spragtelėjimu, pridėkite +10 ms. Jei rodomi per ankstyvi, atimkite.</span>`:''}</div><div class="theory" style="gap:10px"><h3>3. Akordai</h3><p class="muted">Pasirinkite akordą ir 3 kartus švariai perbraukite normaliu stiprumu. Nešvarius braukimus programėlė atmes ir pasakys, kuri nata neskamba. Įrašykite tuos akordus, kuriuos jau mokate. Kitus įrašysite, kai išmoksite.</p><div class="row" style="justify-content:flex-start">${chs}</div></div>
    <p class="muted" style="font-size:.88rem">Kai gitara įrašyta, akordų keitimai lyginami su jūsų etalonu, o braukimai vertinami kaip „per stiprūs“ arba „per silpni“, lyginant su jūsų normaliu braukimu. Pasikeitus stygoms ar kambariui, verta įrašyti iš naujo.</p>
    <button class="btn" id="calBack" style="align-self:flex-start">Grįžti</button>`;
 }
 function calClick(t){
   if(t.id==="calNoise"){calStart("noise",null);return true;}
+  if(t.id==="calLat"){calStart("lat",null);return true;}
+  if(t.dataset.callat){if(S.latCal){S.latCal.v=Math.max(0,S.latCal.v+(+t.dataset.callat)/1000);S.rmLat=S.latCal.v;save();renderCal();}return true;}
   if(t.dataset.cals){CAL.msg2="";calStart("string",+t.dataset.cals);return true;}
   if(t.dataset.calc){CAL.msg2="";calStart("chord",t.dataset.calc);return true;}
   if(t.id==="calForce"){if(CAL.lastRaw&&CAL.active){CAL.got.push(CAL.lastRaw);CAL.lastRaw=null;CAL.rejects=0;CAL.msg=`Įskaityta ${CAL.got.length} iš 3.`;if(CAL.got.length>=3){const G=CAL.got;const t2=new Array(12).fill(0);G.forEach(x=>x.ch.forEach((v,i)=>t2[i]+=v/3));const avg=k=>G.reduce((a,x)=>a+x[k],0)/3;calData().chords[CAL.target]={v:2,t:t2,vl:avgVl(G),peak:avg("peak"),br:avg("br"),rise:avg("rise"),d:todayStr()};save();const nm=CAL.target;calStop();CAL.msg=`${nm} įrašytas kaip jūsų etalonas.`;}renderCal();}return true;}
@@ -1570,18 +1580,23 @@ function sqSched(){
   const slot=Math.floor((a.currentTime-SQ.start)/sqSlot()+0.5);if(slot!==SQ.curSlot){SQ.curSlot=slot;paintSQLive();}
   if(a.currentTime>lastT+0.6+SQ.lat)endSeq();
 }
-function hearClk(st,t,bd){
+function hearClk(st,t,bd,kmin,kmax){if(kmin==null){kmin=-4;kmax=-1;}
   const b=P.hbuf;P.anHi.getFloatTimeDomainData(b);let mx=0;for(let i=0;i<b.length;i++){const v=Math.abs(b[i]);if(v>mx)mx=v;}
   if(mx<0.004||t-st.lastClk<0.3)return;let idx=0;while(idx<b.length&&Math.abs(b[idx])<0.3*mx)idx++;
   const arr=t-(b.length-idx)/AC.sampleRate-(AC.baseLatency||0);
   const k=Math.round((arr-0.15-st.start)/bd);const lat=arr-(st.start+k*bd);
-  if(k<-4||k>-1||lat<0||lat>0.6)return;st.lastClk=t;st.clk.push(lat);
+  if(k<kmin||k>kmax||lat<0||lat>0.6)return;st.lastClk=t;st.clk.push(lat);
 }
 function latFinish(st){
-  if(st.latDone)return;st.latDone=true;const c=st.clk;
-  if(c.length>=2){const m=median(c);const good=c.filter(x=>Math.abs(x-m)<0.03);if(good.length>=2){st.lat=median(good);st.latOk=true;S.rmLat=st.lat;save();return;}}
-  st.latOk=false;st.lat=S.rmLat||0;
+  if(st.latDone)return;st.latDone=true;const c=st.clk;const cal=S.latCal?S.latCal.v:null;let m=null;
+  if(c.length>=2){const md=median(c);const good=c.filter(x=>Math.abs(x-md)<0.03);if(good.length>=2)m=median(good);}
+  if(m!=null&&(cal==null||Math.abs(m-cal)<=0.05)){st.lat=m;st.latSrc="meas";S.rmLat=m;save();}
+  else if(cal!=null){st.lat=cal;st.latSrc="cal";}
+  else{st.lat=S.rmLat||0;st.latSrc=S.rmLat?"prev":"none";}
+  st.latOk=st.latSrc!=="none";
 }
+function latText(st){const ms=Math.round(st.lat*1000);return st.latSrc==="meas"?`Telefono garso vėlavimas ${ms} ms, jis atimamas.`:st.latSrc==="cal"?`Atimamas vėlavimas iš gitaros pritaikymo: ${ms} ms.`:st.latSrc==="prev"?`Vėlavimas šįkart neišmatuotas, atimamas ankstesnis: ${ms} ms.`:"Vėlavimas neišmatuotas ir neatimamas. Išmatuokite jį skiltyje „Gitaros pritaikymas“.";}
+
 function sqFrame(){
   if(!P.anLow)return;const a=AC;const t=a.currentTime;
   if(t<SQ.start){if(P.anHi)hearClk(SQ,t,60/SQ.bpm);return;}
@@ -1619,7 +1634,7 @@ function sqHtml(id,bpm){
   const R=SQ.result&&SQ.id===id?SQ.result:null;let h=`<span class="eyebrow">Patikra mikrofonu · ${esc(SEQS[id].t)}</span>`;
   if(R&&R.empty)h+=`<span class="heard bad">Beveik nieko neišgirdau. Padėkite telefoną arčiau ir grokite garsiau.</span>`;
   else if(R){const pass=R.ok>=90&&R.onTime>=80;
-    h+=`<div class="rgrid"><div class="stat"><b>${R.ok}%</b><small>natų teisingai</small></div><div class="stat"><b>${R.onTime}%</b><small>laiku</small></div></div>${pass?'<b class="heard good">Švariai ir laiku! Ši diena įskaityta tikslui.</b>':''}`;
+    h+=`<div class="rgrid"><div class="stat"><b>${R.ok}%</b><small>natų teisingai</small></div><div class="stat"><b>${R.onTime}%</b><small>laiku</small></div></div><span class="muted" style="font-size:.82rem">Atimtas telefono vėlavimas ${R.lat} ms.</span>${pass?'<b class="heard good">Švariai ir laiku! Ši diena įskaityta tikslui.</b>':''}`;
     const tips=seqTips(R);if(tips.length)h+=`<ul class="tips">${tips.map(t=>`<li>${esc(t)}</li>`).join('')}</ul>`;}
   else h+=`<span class="muted" style="font-size:.88rem">Programėlė groja metronomą ir tikrina kiekvieną natą: ar teisinga ir ar laiku. Po 4 tvaksnių įžangos pradėkite. Telefoną padėkite netoli gitaros, ne ausinėse.</span>`;
   const opts=[...new Set([tgt-10,tgt,tgt+10])].filter(b=>b>=40);
