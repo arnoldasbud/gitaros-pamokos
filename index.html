@@ -745,6 +745,11 @@ function earClick(t){
 
 
 /* ---------- klausos lavinimas ---------- */
+function hlName(k){const [d,n]=k.split(" ");return n?(d==="Žemiau"?"žemyn per ":"aukštyn per ")+n+" pust.":d;}
+function glide(q){const a=ac();if(!a||!q)return;const t=a.currentTime+0.05;const fa=440*Math.pow(2,(q.a-69)/12),fb=440*Math.pow(2,(q.b-69)/12);
+  const o=a.createOscillator(),g=a.createGain();o.type="triangle";o.frequency.setValueAtTime(fa,t);o.frequency.setValueAtTime(fa,t+0.5);o.frequency.exponentialRampToValueAtTime(fb,t+1.5);
+  g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(0.3,t+0.03);g.gain.setValueAtTime(0.3,t+1.8);g.gain.exponentialRampToValueAtTime(0.0001,t+2.1);o.connect(g).connect(a.destination);o.start(t);o.stop(t+2.2);
+  pluck(q.a,t+2.5,0.9);pluck(q.b,t+3.3,1.2);}
 function pluck(midi,when,dur,vol){
   const a=ac();if(!a)return;const sr=a.sampleRate;const f=440*Math.pow(2,(midi-69)/12);
   const len=Math.floor(sr*dur);const buf=a.createBuffer(1,len,sr);const d=buf.getChannelData(0);
@@ -778,7 +783,7 @@ function rnd(a){return a[Math.floor(Math.random()*a.length)];}
 function ri(a,b){return a+Math.floor(Math.random()*(b-a+1));}
 function makeQ(){
   const m=E.mode,L=eLevel(m),def=EMODES[m];const F=E.sess&&E.sess.fix?E.sess.fixOpts:null;
-  if(m==="hl"){const lo=def.levels[L].min;let a=ri(48,67),dist=ri(lo,Math.max(lo,7)),up=Math.random()<.5;return {kind:m,a,b:up?a+dist:a-dist,ans:up?"Aukščiau":"Žemiau",opts:["Žemiau","Aukščiau"]};}
+  if(m==="hl"){const lo=def.levels[L].min;let a=ri(48,67),dist=ri(lo,Math.max(lo,7)),up=Math.random()<.5;if(E.sess&&E.sess.fix){const W=weakItems("hl").filter(w=>/\d/.test(w.k));if(W.length&&Math.random()<0.65){const w=rnd(W.slice(0,3));up=w.k.startsWith("Aukščiau");dist=+w.k.split(" ")[1];}}return {kind:m,a,b:up?a+dist:a-dist,ans:up?"Aukščiau":"Žemiau",opts:["Žemiau","Aukščiau"]};}
   if(m==="iv"){const opts=F||def.levels[L];const k=rnd(opts);const st=E.ivStyle==="mix"?rnd(["up","down","harm"]):E.ivStyle;const a=st==="down"?ri(57,69):ri(45,57);return {kind:m,a,semi:IV[k][0],style:st,ans:k,opts};}
   if(m==="ch"){const opts=F||def.levels[L];const k=rnd(opts);return {kind:m,root:ri(45,55),ans:k,opts};}
   if(m==="pr"){const opts=F||def.levels[L];const k=rnd(opts);return {kind:m,key:ri(45,52),ans:k,opts};}
@@ -820,10 +825,10 @@ function answer(k){
   if(E.answered||!ss){playQ(q,k);return;}
   E.answered=true;const ok=k===q.ans;const t=Math.max(0,(performance.now()-E.readyAt)/1000);
   ss.i++;ss.times.push(t);if(ok)ss.ok++;else{const key=ansName(q.kind,q.ans)+" → "+ansName(q.kind,k);ss.conf[key]=(ss.conf[key]||0)+1;}
-  record(q.kind,q.ans,ok);if(!ok){const cf=eConf(q.kind);cf[q.ans+"|"+k]=(cf[q.ans+"|"+k]||0)+1;}beep(ok);
+  record(q.kind,q.kind==="hl"?q.ans+" "+Math.abs(q.b-q.a):q.ans,ok);if(!ok){const cf=eConf(q.kind);cf[q.ans+"|"+k]=(cf[q.ans+"|"+k]||0)+1;}beep(ok);
   const fb=document.getElementById("eFb");
   let extra="";if(q.kind==="iv")extra=` Įsiminkite: ${IV[q.ans][2]}.`;if(q.kind==="ch")extra=` Skamba ${CH[q.ans][2]}.`;
-  if(fb){fb.className="efb "+(ok?"good":"bad");fb.innerHTML=(ok?"Teisingai! ":"Ne visai. Teisingas atsakymas: <b>"+ansName(q.kind,q.ans)+"</b>.")+extra+(!ok&&q.kind!=="hl"?"<br><span class='muted'>Paspauskite variantus ir palyginkite, kaip jie skamba.</span>":"");}
+  if(fb){fb.className="efb "+(ok?"good":"bad");fb.innerHTML=(ok?"Teisingai! ":"Ne visai. Teisingas atsakymas: <b>"+ansName(q.kind,q.ans)+"</b>.")+extra+(!ok&&q.kind!=="hl"?"<br><span class='muted'>Paspauskite variantus ir palyginkite, kaip jie skamba.</span>":"")+(!ok&&q.kind==="hl"?"<br><span class='muted'>Tyliai padainuokite abi natas: ar balsas kyla, ar leidžiasi?</span><br><button class='btn small' id='eGlide'>Išgirsti su slinktimi</button>":"");}
   document.querySelectorAll("[data-eans]").forEach(b=>{const v=b.dataset.eans;b.classList.toggle("right",v===q.ans);b.classList.toggle("wrongb",v===k&&!ok);});
   const nx=document.getElementById("eNext");if(nx){nx.hidden=false;nx.textContent=ss.i>=ss.n?"Baigti sesiją":"Kitas klausimas";}
   paintProg();
@@ -1306,10 +1311,10 @@ function fixSet(m){
   const arr=[...set].filter(k=>all.includes(k)).slice(0,4);
   if(arr.length<2)return null;return arr;
 }
-function fixAvailable(m){if(m==="hl")return false;if(m==="match")return weakItems("match").length>0;return !!fixSet(m);}
+function fixAvailable(m){if(m==="hl")return weakItems("hl").some(w=>/\d/.test(w.k));if(m==="match")return weakItems("match").length>0;return !!fixSet(m);}
 function weakHtml(m){
   const W=weakItems(m).slice(0,4),C=topConf(m).slice(0,3);if(!W.length&&!C.length)return '';
-  const nm=k=>m==="ch"&&CH[k]?CH[k][1]:m==="iv"&&IV[k]?k+" ("+IV[k][1]+")":k;
+  const nm=k=>m==="ch"&&CH[k]?CH[k][1]:m==="iv"&&IV[k]?k+" ("+IV[k][1]+")":m==="hl"?hlName(k):k;
   return `<div class="theory" style="gap:8px"><h3>Silpnos vietos</h3>
    ${W.length?`<p>${W.map(w=>`${esc(nm(w.k))}: <b>${Math.round(100*w.ok/w.n)}%</b> teisingai`).join(" · ")}</p>`:''}
    ${C.length?`<p class="muted">Dažniausiai painiojate: ${C.map(c=>`${esc(nm(c.a))} palaikote ${esc(nm(c.b))} (${c.v} k.)`).join("; ")}</p>`:''}
@@ -1665,7 +1670,7 @@ function sumItems(){
   const wc=weakCells();if(wc.length)out.push({k:"Grifo natos",t:"Lėčiausiai arba su klaidomis: "+wc.slice(0,5).map(w=>`${w.n} (${w.s} st. ${w.fr} sk.)`).join(", ")+".",act:wc.length>=3?`<button class="btn small" data-sumfix="tr">Taisymo ratas</button>`:''});
   // klausa
   EORDER.forEach(m=>{const W=weakItems(m).slice(0,3),C=topConf(m).slice(0,2);if(!W.length&&!C.length)return;
-    const nm=k=>m==="ch"&&CH[k]?CH[k][1]:m==="iv"&&IV[k]?IV[k][1]:m==="match"&&!isNaN(+k)?nn(+k)+(Math.floor(+k/12)-1):k;
+    const nm=k=>m==="ch"&&CH[k]?CH[k][1]:m==="iv"&&IV[k]?IV[k][1]:m==="hl"?hlName(k):m==="match"&&!isNaN(+k)?nn(+k)+(Math.floor(+k/12)-1):k;
     let t=W.length?W.map(w=>`${nm(w.k)} ${Math.round(100*w.ok/w.n)}%`).join(", ")+".":"";if(C.length)t+=(t?" ":"")+"Painiojate: "+C.map(c=>`${nm(c.a)} su ${nm(c.b)} (${c.v} k.)`).join("; ")+".";
     out.push({k:"Klausa · "+EMODES[m].t,t,act:`<button class="btn small" data-eartr="${m}">Treniruoti</button>`});});
   // akordai
@@ -1692,6 +1697,7 @@ function sumHtml(){const I=sumItems();
   return `<h2 style="margin-top:12px">Ką reikia pasitempti</h2>`+(I.length?`<ul class="sumlist">${I.map(r=>`<li><span class="eyebrow">${esc(r.k)}</span><span>${esc(r.t)}</span>${r.act?`<div class="row" style="justify-content:flex-start">${r.act}</div>`:''}</li>`).join('')}</ul>`:`<p class="muted">Kol kas klaidų nedaug arba trūksta duomenų. Suvestinė pildosi, kai darote pratimus su mikrofonu, klausos sesijas ir testus.</p>`);}
 
 function goalsClick(t){
+  if(t.id==="eGlide"){glide(E.q);return true;}
   if(t.dataset.qz){const [ph,gi]=t.dataset.qz.split(":").map(Number);startQuiz(ph,gi);return true;}
   if(t.dataset.qa!==undefined){quizAnswer(+t.dataset.qa);return true;}
   if(t.id==="qzNext"){quizNext();return true;}
