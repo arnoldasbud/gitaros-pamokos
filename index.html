@@ -379,13 +379,13 @@ document.addEventListener("visibilitychange",()=>{if(document.visibilityState===
 const T={id:null,total:0,left:0,running:false,last:0,iv:null,spent:0};
 function fmt(s){s=Math.max(0,Math.ceil(s));return String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
 function timerFor(ex){if(T.id!==ex.id){if(T.running)pauseT();T.id=ex.id;T.total=ex.m*60;T.left=T.total;T.spent=0;}}
-function startT(ex){ac();if(ex.seq&&!SQ.active)startSeq(ex.seq,ex.bpm||60);if(ex.changes&&!CH2.active&&!RM.active){rmCfg().mode==="rhythm"?startRhythm(ex):startChanges(ex);}if(ex.drill&&!(P.round&&P.round.inline))startInline();timerFor(ex);if(T.left<=0)T.left=T.total;if(ex.bpm&&S.metroWithTimer!==false&&!ex.changes&&!ex.seq){setBpm(ex.bpm);if(!M.running){startM();M.byTimer=true;}}T.running=true;T.last=performance.now();clearInterval(T.iv);T.iv=setInterval(tick,250);wakeOn();paintTimer();}
+function startT(ex){ac();if(ex.seq&&!SQ.active)startSeq(ex.seq,ex.bpm||60,(T.id===ex.id&&T.left>1)?T.left:ex.m*60);if(ex.changes&&!CH2.active&&!RM.active){rmCfg().mode==="rhythm"?startRhythm(ex):startChanges(ex);}if(ex.drill&&!(P.round&&P.round.inline))startInline();timerFor(ex);if(T.left<=0)T.left=T.total;if(ex.bpm&&S.metroWithTimer!==false&&!ex.changes&&!ex.seq){setBpm(ex.bpm);if(!M.running){startM();M.byTimer=true;}}T.running=true;T.last=performance.now();clearInterval(T.iv);T.iv=setInterval(tick,250);wakeOn();paintTimer();}
 function stopTimerMetro(){if(M.byTimer){M.byTimer=false;stopM();}}
-function pauseT(){if(!T.running)return;tick();T.running=false;clearInterval(T.iv);stopTimerMetro();if(SQ.active)sqStop();if(P.round&&P.round.inline)endRound();if(CH2.active)endChanges();if(RM.active)endRhythm();flushSpent();wakeOff();paintTimer();}
+function pauseT(){if(!T.running)return;tick();T.running=false;clearInterval(T.iv);stopTimerMetro();if(SQ.active)endSeq();if(P.round&&P.round.inline)endRound();if(CH2.active)endChanges();if(RM.active)endRhythm();flushSpent();wakeOff();paintTimer();}
 function resetT(ex){pauseT();T.id=ex.id;T.total=ex.m*60;T.left=T.total;T.spent=0;paintTimer();}
 function flushSpent(){if(T.spent>0){addSecs(T.spent);T.spent=0;save();paintStats();}}
 function tick(){if(!T.running)return;const now=performance.now();const dt=(now-T.last)/1000;T.last=now;T.left-=dt;T.spent+=dt;
-  if(T.left<=0){T.left=0;T.running=false;clearInterval(T.iv);stopTimerMetro();if(P.round&&P.round.inline)endRound();if(CH2.active)endChanges();if(RM.active)endRhythm();flushSpent();markDone(T.id,true);save();chime();toast("Laikas baigėsi. Pratimas atliktas!");wakeOff();renderToday();return;}
+  if(T.left<=0){T.left=0;T.running=false;clearInterval(T.iv);stopTimerMetro();if(SQ.active)endSeq();if(P.round&&P.round.inline)endRound();if(CH2.active)endChanges();if(RM.active)endRhythm();flushSpent();markDone(T.id,true);save();chime();toast("Laikas baigėsi. Pratimas atliktas!");wakeOff();renderToday();return;}
   paintTimer();}
 function paintTimer(){document.querySelectorAll("[data-clock]").forEach(el=>{const id=el.dataset.clock;const ex=curEx().find(e=>e.id===id);if(!ex)return;const tot=ex.m*60;const left=T.id===id?T.left:tot;el.textContent=fmt(left);el.classList.toggle("run",T.id===id&&T.running);const bar=document.querySelector('[data-bar="'+id+'"]');if(bar)bar.style.width=((1-left/tot)*100)+"%";const b=document.querySelector('[data-start="'+id+'"]');if(b)b.textContent=(T.id===id&&T.running)?"Pauzė":(T.id===id&&left<tot&&left>0?"Tęsti":"Pradėti");});}
 
@@ -1571,9 +1571,10 @@ function seqBuild(id){
 const SEQS={chrom:{t:"Chromatinis 1-2-3-4",sub:1},cscale:{t:"C majoro gama",sub:1},penta:{t:"Am pentatonika",sub:2}};
 const SQ={active:false,id:null,bpm:60,sub:1,list:[],start:0,beat:0,nextT:0,iv:null,clk:[],lastClk:0,lat:0,latDone:false,floor:[],lastOn:0,pend:null,res:[],last:null,result:null,curSlot:-1};
 function sqSlot(){return 60/SQ.bpm/SQ.sub;}
-async function startSeq(id,bpm){
+async function startSeq(id,bpm,loopSecs){
   if(SQ.active)return;if(M.running)stopM();if(SC.active){SC.active=false;SC.done=false;micOff();}if(RM.active)endRhythm();if(CH2.active)endChanges();if(P.round&&!P.round.inline)stopRound();else if(P.round)endRound();
-  Object.assign(SQ,{active:true,id,bpm,sub:SEQS[id].sub,list:seqBuild(id),clk:[],lastClk:0,lat:S.rmLat||0,latDone:false,latOk:false,floor:[],lastOn:0,pend:null,res:[],last:null,result:null,curSlot:-1});
+  const base=seqBuild(id);const slot0=60/bpm/SEQS[id].sub;const reps=loopSecs?Math.max(1,Math.ceil(loopSecs/(base.length*slot0))):1;
+  Object.assign(SQ,{active:true,id,bpm,sub:SEQS[id].sub,N:base.length,loop:!!loopSecs,list:[].concat(...Array(reps).fill(base)),clk:[],lastClk:0,lat:S.rmLat||0,latDone:false,latOk:false,floor:[],lastOn:0,pend:null,res:[],last:null,result:null,curSlot:-1});
   paintSQ();const ok=await micOn();if(!SQ.active){if(ok)micOff();return;}
   if(!ok){SQ.active=false;paintSQ();return;}
   const a=AC;const lp1=a.createBiquadFilter(),lp2=a.createBiquadFilter();lp1.type=lp2.type="lowpass";lp1.frequency.value=lp2.frequency.value=1400;P.anLow=a.createAnalyser();P.anLow.fftSize=512;P.src.connect(lp1);lp1.connect(lp2);lp2.connect(P.anLow);P.lbuf=new Float32Array(512);
@@ -1622,12 +1623,13 @@ function sqNote(p){
 }
 function endSeq(){
   if(!SQ.active)return;SQ.active=false;clearInterval(SQ.iv);micOff();P.anLow=null;P.anHi=null;
+  const sdE=sqSlot();const el=Math.max(0,Math.min(SQ.list.length,Math.floor((AC.currentTime-SQ.lat-SQ.start)/sdE+0.5)));if(el<SQ.list.length){SQ.list=SQ.list.slice(0,el);SQ.res=SQ.res.slice(0,el);}
   const n=SQ.list.length;const R=SQ.res;const heard=R.filter(Boolean);
-  if(heard.length<n*0.3){SQ.result={empty:true};paintSQ();return;}
+  if(!n||heard.length<n*0.3){SQ.result={empty:true};paintSQ();return;}
   const base=median(heard.map(r=>r.off));const tol=Math.min(0.07,sqSlot()*0.18);
   const okN=SQ.list.filter((_,i)=>R[i]&&R[i].ok).length;const onN=SQ.list.filter((_,i)=>R[i]&&R[i].ok&&Math.abs(R[i].off-base)<=tol).length;
   const errs=SQ.list.map((e,i)=>({i,s:e.s,fr:e.fr,exp:e.m,got:R[i]?R[i].got:null,miss:!R[i],late:R[i]&&R[i].ok?Math.round((R[i].off-base)*1000):0})).filter(x=>x.miss||x.got!==x.exp&&!(x.exp<52&&x.got===x.exp+12)||Math.abs(x.late)>tol*1000);
-  const res={d:todayStr(),id:SQ.id,bpm:SQ.bpm,n,ok:Math.round(100*okN/n),onTime:Math.round(100*onN/n),lat:Math.round(SQ.lat*1000),errs:errs.map(e=>({s:e.s,fr:e.fr,got:e.got,miss:e.miss,late:e.late,wrong:!e.miss&&e.got!==e.exp&&!(e.exp<52&&e.got===e.exp+12)}))};
+  const res={d:todayStr(),id:SQ.id,bpm:SQ.bpm,n,rounds:+(n/SQ.N).toFixed(1),ok:Math.round(100*okN/n),onTime:Math.round(100*onN/n),lat:Math.round(SQ.lat*1000),errs:errs.map(e=>({s:e.s,fr:e.fr,got:e.got,miss:e.miss,late:e.late,wrong:!e.miss&&e.got!==e.exp&&!(e.exp<52&&e.got===e.exp+12)}))};
   if(!S.sqHist)S.sqHist=[];S.sqHist.push(res);if(S.sqHist.length>200)S.sqHist.shift();SQ.result=res;save();if(res.ok>=90&&res.onTime>=80)chime();renderGoals();paintSQ();paintStats&&paintStats();
 }
 function sqStop(){if(SQ.active){SQ.active=false;clearInterval(SQ.iv);micOff();P.anLow=null;P.anHi=null;SQ.result=null;paintSQ();}}
@@ -1641,7 +1643,7 @@ function sqHtml(id,bpm){
   const R=SQ.result&&SQ.id===id?SQ.result:null;let h=`<span class="eyebrow">Patikra mikrofonu · ${esc(SEQS[id].t)}</span>`;
   if(R&&R.empty)h+=`<span class="heard bad">Beveik nieko neišgirdau. Padėkite telefoną arčiau ir grokite garsiau.</span>`;
   else if(R){const pass=R.ok>=90&&R.onTime>=80;
-    h+=`<div class="rgrid"><div class="stat"><b>${R.ok}%</b><small>natų teisingai</small></div><div class="stat"><b>${R.onTime}%</b><small>laiku</small></div></div><span class="muted" style="font-size:.82rem">Atimtas telefono vėlavimas ${R.lat} ms.</span>${pass?'<b class="heard good">Švariai ir laiku! Ši diena įskaityta tikslui.</b>':''}`;
+    h+=`<div class="rgrid"><div class="stat"><b>${R.ok}%</b><small>natų teisingai</small></div><div class="stat"><b>${R.onTime}%</b><small>laiku</small></div></div>${R.rounds>1?`<span class="muted" style="font-size:.82rem">Įvertinta ${R.n} natų (${String(R.rounds).replace(".",",")} rato).</span>`:''}<span class="muted" style="font-size:.82rem">Atimtas telefono vėlavimas ${R.lat} ms.</span>${pass?'<b class="heard good">Švariai ir laiku! Ši diena įskaityta tikslui.</b>':''}`;
     const tips=seqTips(R);if(tips.length)h+=`<ul class="tips">${tips.map(t=>`<li>${esc(t)}</li>`).join('')}</ul>`;}
   else h+=`<span class="muted" style="font-size:.88rem">Paspaudus „Pradėti“ (laikmatį) arba mygtuką žemiau, programėlė groja metronomą ir tikrina kiekvieną natą: ar teisinga ir ar laiku. Po 4 tvaksnių įžangos pradėkite. Rezultatas pasirodys čia, kai baigsite visas ${seqBuild(id).length} natas. Telefoną padėkite netoli gitaros, ne ausinėse.</span>`;
   const opts=[...new Set([tgt-10,tgt,tgt+10])].filter(b=>b>=40);
@@ -1649,8 +1651,9 @@ function sqHtml(id,bpm){
 }
 function seqTips(R){
   const t=[];const W=R.errs.filter(e=>e.wrong),Mi=R.errs.filter(e=>e.miss),L=R.errs.filter(e=>!e.wrong&&!e.miss&&e.late);
-  if(W.length)t.push("Neteisingos natos: "+W.slice(0,4).map(e=>`${e.s} st. ${e.fr} sk. (girdėjau ${nn(e.got)})`).join(", ")+(W.length>4?` ir dar ${W.length-4}`:"")+".");
-  if(Mi.length)t.push(`Neišgirdau ${Mi.length} ${ltPl(Mi.length,"natos","natų","natų")}: `+Mi.slice(0,4).map(e=>`${e.s} st. ${e.fr} sk.`).join(", ")+" Gal nata prislopinta arba praleista.");
+  const grp=a=>{const c={};a.forEach(e=>{const k=e.s+" st. "+e.fr+" sk.";c[k]=(c[k]||0)+1;});return Object.entries(c).sort((x,y)=>y[1]-x[1]);};
+  if(W.length){const g=grp(W);t.push("Neteisingos natos: "+g.slice(0,4).map(([k,v])=>k+(v>1?` (${v} k.)`:"")).join(", ")+(g.length>4?` ir dar ${g.length-4} vietos`:"")+".");}
+  if(Mi.length)t.push(`Neišgirdau ${Mi.length} ${ltPl(Mi.length,"natos","natų","natų")}: `+grp(Mi).slice(0,4).map(([k,v])=>k+(v>1?` (${v} k.)`:"")).join(", ")+" Gal nata prislopinta arba praleista.");
   const late=L.filter(e=>e.late>0).length,early=L.filter(e=>e.late<0).length;
   if(late>early&&late>=3)t.push(`${late} ${ltPl(late,"nata","natos","natų")} pavėlavo. Ruoškite kitą pirštą iš anksto, laikykite pirštus arti stygų.`);
   else if(early>=3)t.push(`${early} ${ltPl(early,"nata","natos","natų")} per anksti. Klausykite metronomo ir neskubėkite.`);
@@ -1660,7 +1663,7 @@ function seqTips(R){
 function paintSQLive(){
   if(!SQ.active)return;const i=Math.max(0,SQ.curSlot);const n=SQ.list.length;const cur=SQ.list[Math.min(i,n-1)],nx=SQ.list[i+1];
   document.querySelectorAll("[data-sqbox]").forEach(box=>{if(box.dataset.sqbox!==SQ.id)return;const a=box.querySelector("#sqNow");if(!a){box.innerHTML=sqHtml(SQ.id,SQ.bpm);return;}
-    if(SQ.curSlot>=0){a.textContent=cur.s+" st. "+cur.fr+" sk.";box.querySelector("#sqNext").textContent=nx?"Toliau: "+nx.s+" st. "+nx.fr+" sk.":"Paskutinė";box.querySelector("#sqProg").textContent=Math.min(i+1,n)+" / "+n;}
+    if(SQ.curSlot>=0){a.textContent=cur.s+" st. "+cur.fr+" sk.";box.querySelector("#sqNext").textContent=nx?"Toliau: "+nx.s+" st. "+nx.fr+" sk.":"Paskutinė";box.querySelector("#sqProg").textContent=SQ.loop?((i%SQ.N)+1)+" / "+SQ.N+" · "+(Math.floor(i/SQ.N)+1)+" ratas · vertinimas pasibaigus laikui":Math.min(i+1,n)+" / "+n;}
     const L=SQ.last,f=box.querySelector("#sqLast");if(L&&f){const e=SQ.list[L.i];f.className="heard "+(L.ok?"good":"bad");f.textContent=L.ok?`${e.s} st. ${e.fr} sk. teisingai`:L.got!=null?`Girdėjau ${nn(L.got)}${Math.floor(L.got/12)-1}, turėjo būti ${nn(e.m)}${Math.floor(e.m/12)-1} (${e.s} st. ${e.fr} sk.)`:"Neaiškus garsas";}});
 }
 function paintSQ(){document.querySelectorAll("[data-sqbox]").forEach(b=>{const id=b.dataset.sqbox;b.innerHTML=sqHtml(id,+b.dataset.sqbpm||60);});}
@@ -1716,7 +1719,7 @@ PHASES.forEach(p=>p.ex.forEach(e=>{if(e.id==='chrom')e.seq='chrom';if(e.id==='sc
 
 function renderAll(){renderToday();renderGoals();renderTheory();renderMetro();if(!P.round)renderEar();renderEarTrain();renderCal();}
 function render(){renderAll();}
-const APP_V="2026-11-11c";
+const APP_V="2026-11-11d";
 async function checkUpdate(){try{const r=await fetch(location.pathname+"?chk="+Date.now(),{cache:"no-store"});const t=await r.text();const m=t.match(/const APP_V="([^"]+)"/);
   if(m&&m[1]!==APP_V&&!document.getElementById("updBar")){const d=document.createElement("div");d.id="updBar";d.className="note";d.style.cssText="position:fixed;left:12px;right:12px;top:12px;z-index:50;display:flex;gap:10px;align-items:center;justify-content:space-between";
     d.innerHTML='<span>Yra nauja programėlės versija.</span><button class="btn small primary" id="updGo">Atnaujinti</button>';document.body.appendChild(d);
