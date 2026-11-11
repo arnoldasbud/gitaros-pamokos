@@ -467,6 +467,7 @@ function renderGoals(){
    <p><b>Tikslas pasiektas,</b> kai jį įvykdote 3 skirtingas dienas. Praleista diena rezultato nenubraukia.</p>
    <p><b>Kartą per savaitę</b> 10 min skirkite ankstesnio etapo pratimams.</p>
    <p class="muted">Šiomis taisyklėmis remiasi „Šiandienos rekomendacijos“ skiltyje „Šiandien“.</p></div></details>`;
+  h+=`<p class="muted" style="font-size:.75rem">Programėlės versija ${typeof APP_V!=="undefined"?APP_V:""}</p>`;
   if(S.phase>0)h+=`<button class="btn small" id="prev" style="align-self:flex-start">Grįžti į ${S.phase} etapą</button>`;
   v.innerHTML=h;
 }
@@ -1715,7 +1716,13 @@ PHASES.forEach(p=>p.ex.forEach(e=>{if(e.id==='chrom')e.seq='chrom';if(e.id==='sc
 
 function renderAll(){renderToday();renderGoals();renderTheory();renderMetro();if(!P.round)renderEar();renderEarTrain();renderCal();}
 function render(){renderAll();}
+const APP_V="2026-11-11b";
+async function checkUpdate(){try{const r=await fetch(location.pathname+"?chk="+Date.now(),{cache:"no-store"});const t=await r.text();const m=t.match(/const APP_V="([^"]+)"/);
+  if(m&&m[1]!==APP_V&&!document.getElementById("updBar")){const d=document.createElement("div");d.id="updBar";d.className="note";d.style.cssText="position:fixed;left:12px;right:12px;top:12px;z-index:50;display:flex;gap:10px;align-items:center;justify-content:space-between";
+    d.innerHTML='<span>Yra nauja programėlės versija.</span><button class="btn small primary" id="updGo">Atnaujinti</button>';document.body.appendChild(d);
+    document.getElementById("updGo").onclick=()=>{location.replace(location.pathname+"?v="+encodeURIComponent(m[1]));};}}catch(e){}}
 renderAll();
+setTimeout(checkUpdate,1500);document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")checkUpdate();});
 // refresh at midnight / when returning to the app
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&!T.running){renderToday();}});
 </script>
