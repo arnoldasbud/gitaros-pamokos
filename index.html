@@ -964,8 +964,9 @@ function judgeGeneric(ch,name){const t=CHORD_PCS[name];const h=[...new Set(t.map
 function chordFrame(){
   P.an.getFloatTimeDomainData(P.buf);let rms=0;for(let i=0;i<P.buf.length;i++)rms+=P.buf[i]*P.buf[i];rms=Math.sqrt(rms/P.buf.length);
   const now=performance.now();const fl=CH2.floor;fl.push(rms);if(fl.length>8)fl.shift();const floor=Math.min(...fl);
-  if(!CH2.pendingAt&&now-CH2.lastOn>280&&rms>Math.max(0.015,((S.cal&&S.cal.noise)||0)*3)&&rms>floor*2.2){CH2.lastOn=now;CH2.pendingAt=now+300;}
-  if(CH2.pendingAt&&now>=CH2.pendingAt){CH2.pendingAt=0;const ch=chroma();if(ch)onStrum(ch);}
+  if(!CH2.pendingAt&&now-CH2.lastOn>280&&rms>Math.max(0.015,((S.cal&&S.cal.noise)||0)*3)&&rms>floor*2.5){CH2.lastOn=now;CH2.pendingAt=now+300;CH2.pk=rms;}
+  if(CH2.pendingAt&&rms>CH2.pk)CH2.pk=rms;
+  if(CH2.pendingAt&&now>=CH2.pendingAt){CH2.pendingAt=0;CH2.peaks=CH2.peaks||[];if(isGhost(CH2.peaks,CH2.pk,0.3))return;CH2.peaks.push(CH2.pk);if(CH2.peaks.length>12)CH2.peaks.shift();const ch=chroma();if(ch)onStrum(ch);}
 }
 function onStrum(ch){
   const p=CH2.pair;const ja=judge(ch,p[0]),jb=judge(ch,p[1]);const idx=classify(ch,p[0],p[1]);const j=idx?jb:ja;
@@ -980,7 +981,7 @@ function registerChange(q,miss,pur){
   if(q!=="clean")beep(false);paintChg();
 }
 async function startChanges(ex){
-  if(CH2.active)return;Object.assign(CH2,{active:true,ex,pair:chgPair(ex),expect:1,cur:0,changes:0,clean:0,strums:[],t0:performance.now(),floor:[],lastOn:0,pendingAt:0,last:null,missing:{},result:null});
+  if(CH2.active)return;Object.assign(CH2,{peaks:[],active:true,ex,pair:chgPair(ex),expect:1,cur:0,changes:0,clean:0,strums:[],t0:performance.now(),floor:[],lastOn:0,pendingAt:0,last:null,missing:{},result:null});
   const ok=await micOn();if(!CH2.active){if(ok)micOff();return;}
   CH2.manual=!ok;if(ok){P.an2=AC.createAnalyser();P.an2.fftSize=8192;P.an2.smoothingTimeConstant=0;P.src.connect(P.an2);P.fbuf=new Float32Array(P.an2.frequencyBinCount);}
   CH2.t0=performance.now();paintChg();
@@ -1033,7 +1034,7 @@ function rmSched(){
 }
 async function startRhythm(ex){
   if(RM.active)return;if(M.running)stopM();const c=rmCfg();
-  Object.assign(RM,{active:true,ex,pair:chgPair(ex),bpm:c.rbpm,per:c.rper,strums:[],floor:[],lastOn:0,pend:null,last:null,result:null,curBeat:-5,clk:[],lastClk:0,lat:S.rmLat||0,latDone:false,latOk:false,latSrc:null});
+  Object.assign(RM,{ghost:0,active:true,ex,pair:chgPair(ex),bpm:c.rbpm,per:c.rper,strums:[],floor:[],lastOn:0,pend:null,last:null,result:null,curBeat:-5,clk:[],lastClk:0,lat:S.rmLat||0,latDone:false,latOk:false,latSrc:null});
   const ok=await micOn();if(!RM.active){if(ok)micOff();return;}
   if(!ok){RM.active=false;toast("Ritmo analizei reikia mikrofono.");paintChg();return;}
   const a=AC;const lp1=a.createBiquadFilter(),lp2=a.createBiquadFilter();lp1.type=lp2.type="lowpass";lp1.frequency.value=lp2.frequency.value=900;
@@ -1048,12 +1049,15 @@ function rhythmFrame(){
   const fl=RM.floor;fl.push(rms);if(fl.length>6)fl.shift();const floor=Math.min(...fl);const t=a.currentTime;
   if(P.anHi&&t<RM.start)rmHearClick(t);
   if(RM.pend){const p=RM.pend;if(rms>p.peak){p.peak=rms;p.peakT=t;}if(t>=p.t+0.3){RM.pend=null;finishStrum(p);}return;}
-  if(rms>Math.max(0.01,((S.cal&&S.cal.noiseLow)||0)*3)&&rms>floor*2&&t-RM.lastOn>0.18){RM.lastOn=t;RM.pend={t:t-0.006-(a.baseLatency||0),peak:rms,peakT:t};}
+  if(rms>Math.max(0.01,((S.cal&&S.cal.noiseLow)||0)*3)&&rms>floor*2.5&&t-RM.lastOn>0.18){RM.lastOn=t;RM.pend={t:t-0.006-(a.baseLatency||0),peak:rms,peakT:t};}
 }
 function rmHearClick(t){hearClk(RM,t,rmBeatDur());}
 function rmLatency(){latFinish(RM);}
+/* tylus garso šuolis, palyginti su ankstesniais braukimais, yra ne braukimas, o skambančių stygų svyravimas, pirštų nukėlimas ar spragsėjimo atgarsis */
+function isGhost(prev,peak,ratio){const L=prev.slice(-8);return L.length>=3&&peak<ratio*median(L);}
 function brightness(){const an=P.an2,hz=AC.sampleRate/an.fftSize;let lo=0,hi=0;for(let i=Math.floor(75/hz);i<Math.ceil(2400/hz);i++){const db=P.fbuf[i];if(!isFinite(db))continue;const p=Math.pow(10,db/10);if(i*hz<1000)lo+=p;else hi+=p;}return lo>0?hi/lo:0;}
 function finishStrum(p){
+  if(isGhost(RM.strums.filter(s=>!s.extra).map(s=>s.peak),p.peak,0.3)){RM.ghost=(RM.ghost||0)+1;return;}
   rmLatency();const bd=rmBeatDur();const pt=p.t-RM.lat;const k=Math.round((pt-RM.start)/bd);if(k<0)return;
   const off=pt-(RM.start+k*bd);const ch=chroma();const br=brightness();
   let correct=null,miss=[];if(ch){const ja=judge(ch,RM.pair[0]),jb=judge(ch,RM.pair[1]);const exp=rmExpected(k);const je=exp?jb:ja,jo=exp?ja:jb;correct=classify(ch,RM.pair[0],RM.pair[1])===exp;miss=je.miss;}
@@ -1574,7 +1578,7 @@ function sqSlot(){return 60/SQ.bpm/SQ.sub;}
 async function startSeq(id,bpm,loopSecs){
   if(SQ.active)return;if(M.running)stopM();if(SC.active){SC.active=false;SC.done=false;micOff();}if(RM.active)endRhythm();if(CH2.active)endChanges();if(P.round&&!P.round.inline)stopRound();else if(P.round)endRound();
   const base=seqBuild(id);const slot0=60/bpm/SEQS[id].sub;const reps=loopSecs?Math.max(1,Math.ceil(loopSecs/(base.length*slot0))):1;
-  Object.assign(SQ,{active:true,id,bpm,sub:SEQS[id].sub,N:base.length,loop:!!loopSecs,list:[].concat(...Array(reps).fill(base)),clk:[],lastClk:0,lat:S.rmLat||0,latDone:false,latOk:false,drift:0,offs:[],floor:[],lastOn:0,pend:null,res:[],last:null,result:null,curSlot:-1});
+  Object.assign(SQ,{active:true,id,bpm,sub:SEQS[id].sub,N:base.length,loop:!!loopSecs,list:[].concat(...Array(reps).fill(base)),clk:[],lastClk:0,lat:S.rmLat||0,latDone:false,latOk:false,drift:0,offs:[],peaks:[],prevGot:null,floor:[],lastOn:0,pend:null,res:[],last:null,result:null,curSlot:-1});
   paintSQ();const ok=await micOn();if(!SQ.active){if(ok)micOff();return;}
   if(!ok){SQ.active=false;paintSQ();return;}
   const a=AC;const lp1=a.createBiquadFilter(),lp2=a.createBiquadFilter();lp1.type=lp2.type="lowpass";lp1.frequency.value=lp2.frequency.value=1400;P.anLow=a.createAnalyser();P.anLow.fftSize=512;P.src.connect(lp1);lp1.connect(lp2);lp2.connect(P.anLow);P.lbuf=new Float32Array(512);
@@ -1611,9 +1615,9 @@ function sqFrame(){
   latFinish(SQ);
   P.anLow.getFloatTimeDomainData(P.lbuf);let rms=0;for(let i=0;i<512;i++)rms+=P.lbuf[i]*P.lbuf[i];rms=Math.sqrt(rms/512);
   const fl=SQ.floor;fl.push(rms);if(fl.length>6)fl.shift();const floor=Math.min(...fl);const sd=sqSlot();
-  if(SQ.pend){const p=SQ.pend;P.an.getFloatTimeDomainData(P.buf);const f=detectPitch(P.buf,a.sampleRate);if(f>0&&t>p.t+0.03)p.det.push(Math.round(12*Math.log2(f/440)+69));
+  if(SQ.pend){const p=SQ.pend;if(rms>p.peak)p.peak=rms;P.an.getFloatTimeDomainData(P.buf);const f=detectPitch(P.buf,a.sampleRate);if(f>0&&t>p.t+0.03)p.det.push(Math.round(12*Math.log2(f/440)+69));
     if(t>=p.t+Math.min(0.2,sd*0.7)){SQ.pend=null;sqNote(p);}return;}
-  if(rms>Math.max(0.006,((S.cal&&S.cal.noiseLow)||0)*3)&&rms>floor*1.8&&t-SQ.lastOn>Math.min(0.15,sd*0.45)){SQ.lastOn=t;SQ.pend={t:t-0.006-(a.baseLatency||0),det:[]};}
+  if(rms>Math.max(0.006,((S.cal&&S.cal.noiseLow)||0)*3)&&rms>floor*2.2&&t-SQ.lastOn>Math.min(0.15,sd*0.45)){SQ.lastOn=t;SQ.pend={t:t-0.006-(a.baseLatency||0),det:[],peak:rms};}
 }
 function sqNote(p){
   /* drift: asmeninis/likęs vėlavimas, išmatuotas iš paskutinių teisingų natų; jis atimamas prieš priskiriant natą tvaksniui */
@@ -1621,6 +1625,10 @@ function sqNote(p){
   let got=null;if(p.det.length){const c={};p.det.forEach(m=>c[m]=(c[m]||0)+1);got=+Object.keys(c).sort((x,y)=>c[y]-c[x])[0];}
   const match=i=>{const ex=SQ.list[i];return ex&&got!=null&&(got===ex.m||(ex.m<52&&got===ex.m+12));};
   let i=Math.round((pt-SQ.start)/sd);
+  SQ.peaks=SQ.peaks||[];if(isGhost(SQ.peaks,p.peak,0.15))return;
+  // ta pati nata kaip ką tik skambėjusi ir netinka šiam tvaksniui: tai ankstesnės natos skambėjimas, ne naujas užgavimas
+  if(got!=null&&SQ.prevGot===got&&!match(i)&&!match(i-1)&&!match(i+1))return;
+  SQ.peaks.push(p.peak);if(SQ.peaks.length>12)SQ.peaks.shift();SQ.prevGot=got;
   // jei nata tiksliai atitinka kaimyninio tvaksnio natą, o šio ne, ji tiesiog per anksti/vėlai, ne neteisinga
   if(!match(i)){for(const j of [i-1,i+1])if(j>=0&&match(j)&&!(SQ.res[j]&&SQ.res[j].ok)){i=j;break;}}
   if(i<0||i>=SQ.list.length)return;
@@ -1727,7 +1735,7 @@ PHASES.forEach(p=>p.ex.forEach(e=>{if(e.id==='chrom')e.seq='chrom';if(e.id==='sc
 
 function renderAll(){renderToday();renderGoals();renderTheory();renderMetro();if(!P.round)renderEar();renderEarTrain();renderCal();}
 function render(){renderAll();}
-const APP_V="2026-11-11e";
+const APP_V="2026-11-11f";
 async function checkUpdate(){try{const r=await fetch(location.pathname+"?chk="+Date.now(),{cache:"no-store"});const t=await r.text();const m=t.match(/const APP_V="([^"]+)"/);
   if(m&&m[1]!==APP_V&&!document.getElementById("updBar")){const d=document.createElement("div");d.id="updBar";d.className="note";d.style.cssText="position:fixed;left:12px;right:12px;top:12px;z-index:50;display:flex;gap:10px;align-items:center;justify-content:space-between";
     d.innerHTML='<span>Yra nauja programėlės versija.</span><button class="btn small primary" id="updGo">Atnaujinti</button>';document.body.appendChild(d);
