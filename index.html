@@ -865,7 +865,7 @@ function endSess(){
   const max=EMODES[ss.mode].levels.length-1;
   if(!ss.fix&&gr.g>=9&&n>=10&&ss.level===eLevel(ss.mode)&&ss.level<max){eSt().level[ss.mode]=ss.level+1;r.up=true;}
   if(!S.earHist)S.earHist=[];S.earHist.push(r);if(S.earHist.length>300)S.earHist.shift();
-  if(E.fromToday)markDone(E.fromToday,true);
+  if(E.fromToday){const ex=curEx().find(e=>e.id===E.fromToday);const modes=ex?[ex.eartr].concat(ex.eartr2?[ex.eartr2]:[]):[];if(modes.every(m=>S.earHist.some(x=>x.mode===m&&x.d===r.d)))markDone(E.fromToday,true);}
   addSecs(dur);save();paintStats&&paintStats();E.last=r;E.q=null;chime();renderEarTrain();
 }
 function fmtDur(s){return s>=60?Math.floor(s/60)+" min "+(s%60)+" s":s+" s";}
@@ -1374,10 +1374,10 @@ function scButtons(ex){const pair=chgPair(ex);return `<span class="eyebrow">Akor
 function earTodayHtml(ex){
   const today=todayStr();const modes=[ex.eartr].concat(ex.eartr2?[ex.eartr2]:[]);
   return `<div class="drill">${modes.map(m=>{const H=(S.earHist||[]).filter(x=>x.mode===m&&x.d===today);
-    return `<div class="stack" style="gap:6px;width:100%;align-items:center"><span class="eyebrow">${EMODES[m].t} · ${eLevel(m)+1} lygis</span>
+    return `<div class="stack" style="gap:6px;width:100%;align-items:center"><span class="eyebrow">${H.length?'✓ ':''}${EMODES[m].t} · ${eLevel(m)+1} lygis</span>
      ${H.length?`<span class="muted" style="font-size:.9rem">Šiandien: ${H.map(x=>`<b>${x.grade}</b>/10`).join(", ")}</span>`:''}
      <button class="btn ${m===ex.eartr?'primary':''}" data-earsess="${m}" data-exid="${ex.id}">${H.length?'Dar viena sesija':'Pradėti sesiją'} (${eSt().len} klausimų)</button></div>`;}).join('')}
-   <span class="muted" style="font-size:.85rem">Sesija atsidarys „Klausa“ skiltyje. Ją baigus, pratimas bus pažymėtas atliktu.</span></div>`;
+   <span class="muted" style="font-size:.85rem">Sesija atsidarys „Klausa“ skiltyje. ${modes.length>1?'Pratimas bus pažymėtas atliktu, kai šiandien atliksite abi užduotis.':'Ją baigus, pratimas bus pažymėtas atliktu.'}</span></div>`;
 }
 
 /* ---------- grifo žaidimas ekrane ---------- */
@@ -1735,7 +1735,7 @@ PHASES.forEach(p=>p.ex.forEach(e=>{if(e.id==='chrom')e.seq='chrom';if(e.id==='sc
 
 function renderAll(){renderToday();renderGoals();renderTheory();renderMetro();if(!P.round)renderEar();renderEarTrain();renderCal();}
 function render(){renderAll();}
-const APP_V="2026-11-11f";
+const APP_V="2026-11-11g";
 async function checkUpdate(){try{const r=await fetch(location.pathname+"?chk="+Date.now(),{cache:"no-store"});const t=await r.text();const m=t.match(/const APP_V="([^"]+)"/);
   if(m&&m[1]!==APP_V&&!document.getElementById("updBar")){const d=document.createElement("div");d.id="updBar";d.className="note";d.style.cssText="position:fixed;left:12px;right:12px;top:12px;z-index:50;display:flex;gap:10px;align-items:center;justify-content:space-between";
     d.innerHTML='<span>Yra nauja programėlės versija.</span><button class="btn small primary" id="updGo">Atnaujinti</button>';document.body.appendChild(d);
