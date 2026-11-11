@@ -500,7 +500,13 @@ function startM(){const a=ac();if(!a){toast("Šis įrenginys negroja garso.");re
 function stopM(){M.running=false;M.byTimer=false;clearInterval(M.iv);document.querySelectorAll("#beats i").forEach(d=>d.classList.remove("on"));wakeOff();const g=document.getElementById("mgo");if(g)g.textContent="Pradėti";}
 
 /* ---------- wiring ---------- */
-function show(v){document.querySelectorAll("nav.tabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.v===v));if(v!=="ear2"&&E.sess)endSess();if(SQ.active&&v!=="today"&&v!=="goals")sqStop();if(v!=="today"&&v!=="goals"&&SC.active){SC.active=false;micOff();}if(v==="today")setTimeout(renderToday,0);if(v==="goals")setTimeout(renderGoals,0);if(v!=="cal"&&CAL.active)calStop();["today","goals","theory","metro","ear","ear2","cal"].forEach(k=>document.getElementById("v-"+k).hidden=k!==v);const keep=(SQ.active||(SC.active&&!SC.ex))?(v==="today"||v==="goals"):(CH2.active||RM.active||SC.active)?v==="today":P.round?(P.round.inline?v==="today":v==="ear"):(v==="ear2"&&E.mode==="match");if((P.on||P.round)&&!keep){if((P.round&&P.round.inline)||CH2.active||RM.active)pauseT();else stopRound();}window.scrollTo(0,0);}
+/* išjungia visus mikrofono režimus ir su jais susijusį laikmatį, kad naujas režimas gautų mikrofoną */
+function releaseMic(){
+  if(T.running&&((P.round&&P.round.inline)||CH2.active||RM.active||SQ.active))pauseT();
+  if(CH2.active)endChanges();if(RM.active)endRhythm();if(SQ.active)endSeq();if(SC.active){SC.active=false;SC.done=false;}
+  if(P.round)stopRound();else if(P.on)micOff();
+}
+function show(v){document.querySelectorAll("nav.tabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.v===v));if(v!=="ear2"&&E.sess)endSess();if(SQ.active&&v!=="today"&&v!=="goals")sqStop();if(v!=="today"&&v!=="goals"&&SC.active){SC.active=false;micOff();}if(v==="today")setTimeout(renderToday,0);if(v==="goals")setTimeout(renderGoals,0);if(v!=="cal"&&CAL.active)calStop();["today","goals","theory","metro","ear","ear2","cal"].forEach(k=>document.getElementById("v-"+k).hidden=k!==v);const keep=(SQ.active||(SC.active&&!SC.ex))?(v==="today"||v==="goals"):(CH2.active||RM.active||SC.active)?v==="today":P.round?(P.round.inline?v==="today":v==="ear"):(v==="ear2"&&E.mode==="match");if((P.on||P.round||CH2.active||RM.active||SQ.active)&&!keep)releaseMic();window.scrollTo(0,0);}
 document.querySelector("nav.tabs").addEventListener("click",e=>{const b=e.target.closest("button");if(b)show(b.dataset.v);});
 document.getElementById("app").addEventListener("click",e=>{
   const t=e.target.closest("button");if(!t)return;
@@ -516,8 +522,8 @@ document.getElementById("app").addEventListener("click",e=>{
   else if(t.id==="nextForce"){goPhase(S.phase+1);show("today");}
   else if(t.id==="prev"){goPhase(S.phase-1);}
   else if(t.dataset.ear){renderEar();show("ear");}
-  else if(t.dataset.earsess){if(P.on)stopRound();if(E.sess)endSess();E.mode=t.dataset.earsess;E.q=null;E.last=null;E.fromToday=t.dataset.exid;show("ear2");startSess(false);}
-  else if(t.dataset.eartr){if(P.on)stopRound();if(!E.sess){E.mode=t.dataset.eartr;E.q=null;E.last=null;}renderEarTrain();show("ear2");}
+  else if(t.dataset.earsess){releaseMic();if(E.sess)endSess();E.mode=t.dataset.earsess;E.q=null;E.last=null;E.fromToday=t.dataset.exid;show("ear2");startSess(false);}
+  else if(t.dataset.eartr){releaseMic();if(!E.sess){E.mode=t.dataset.eartr;E.q=null;E.last=null;}renderEarTrain();show("ear2");}
   else if(goalsClick(t)){}
   else if(calClick(t)){}
   else if(t.dataset.gotab){renderEar();show(t.dataset.gotab);}
@@ -1735,7 +1741,7 @@ PHASES.forEach(p=>p.ex.forEach(e=>{if(e.id==='chrom')e.seq='chrom';if(e.id==='sc
 
 function renderAll(){renderToday();renderGoals();renderTheory();renderMetro();if(!P.round)renderEar();renderEarTrain();renderCal();}
 function render(){renderAll();}
-const APP_V="2026-11-11g";
+const APP_V="2026-11-11h";
 async function checkUpdate(){try{const r=await fetch(location.pathname+"?chk="+Date.now(),{cache:"no-store"});const t=await r.text();const m=t.match(/const APP_V="([^"]+)"/);
   if(m&&m[1]!==APP_V&&!document.getElementById("updBar")){const d=document.createElement("div");d.id="updBar";d.className="note";d.style.cssText="position:fixed;left:12px;right:12px;top:12px;z-index:50;display:flex;gap:10px;align-items:center;justify-content:space-between";
     d.innerHTML='<span>Yra nauja programėlės versija.</span><button class="btn small primary" id="updGo">Atnaujinti</button>';document.body.appendChild(d);
