@@ -323,8 +323,8 @@ const PHASES=[
 ];
 
 const EAR_MAP={"0:notes65":1};
-[["hl","Klausa: aukščiau ar žemiau ir natą į gitarą",3,"Pradėkite nuo „Aukščiau ar žemiau“. Kai pasieksite 3 lygį, pereikite prie „Natą į gitarą“ su atviromis stygomis.","match"],
- ["iv","Klausa: intervalai",4,"Pradėkite nuo oktavos ir kvintos. Prieš atsakydami tyliai padainuokite abi natas."],
+[["hl","Klausa: aukščiau ar žemiau",3,"Išgirsite dvi natas. Ar antroji aukštesnė, ar žemesnė? Šis įgūdis vėliau padės rasti natas gitaroje."],
+ ["iv","Klausa: intervalai ir natą į gitarą",5,"Pradėkite nuo oktavos ir kvintos. Tada „Natą į gitarą“: išgirdę natą, grokite bet kurią atvirą stygą, o programėlė pasakys, ieškoti aukščiau ar žemiau.","match"],
  ["iv","Klausa: intervalai ir akordai",4,"Intervalai aukštyn ir žemyn, tada majoras ar minoras skiltyje „Akordai“."],
  ["ch","Klausa: akordai",4,"Majoras, minoras ir 7. Klausykite akordo „nuotaikos“."],
  ["ch","Klausa: septakordai",4,"Maj7, m7 ir 7: aukštesni akordų lygiai."],
@@ -806,7 +806,7 @@ const EMODES={
   pr:{t:"Progresijos",d:"Išgirsite 4 akordus. Kuri tai progresija? 1 ir 2 lygyje pirmas akordas yra tonacijos I. 3 lygyje progresija gali prasidėti ir nuo vi ar ii.",levels:[["I–IV–V–I","I–V–vi–IV"],["I–IV–V–I","I–V–vi–IV","I–vi–IV–V"],["I–IV–V–I","I–V–vi–IV","I–vi–IV–V","vi–IV–I–V","ii–V–I–I"]]}
 };
 const EORDER=["hl","iv","ch","pr","match"];
-const E={mode:"hl",q:null,answered:false,ivStyle:"up",ignoreUntil:0,okSince:0,mmT0:0,readyAt:0,sess:null,last:null};
+const E={badSince:0,mode:"hl",q:null,answered:false,ivStyle:"up",ignoreUntil:0,okSince:0,mmT0:0,readyAt:0,sess:null,last:null};
 function eSt(){if(!S.earSt)S.earSt={level:{},items:{},total:{}};if(!S.earSt.len)S.earSt.len=10;return S.earSt;}
 function eLevel(m){return eSt().level[m]||0;}
 function rnd(a){return a[Math.floor(Math.random()*a.length)];}
@@ -847,7 +847,7 @@ function startSess(fix){
 }
 function nextQ(play){
   const ss=E.sess;if(ss&&ss.i>=ss.n){endSess();return;}
-  E.q=makeQ();E.answered=false;E.okSince=0;renderEarTrain();
+  E.q=makeQ();E.answered=false;E.okSince=0;E.badSince=0;renderEarTrain();
   if(play){const d=playQ();E.ignoreUntil=performance.now()+d*1000+250;E.readyAt=performance.now()+d*1000;E.mmT0=E.readyAt;}
 }
 function answer(k){
@@ -865,14 +865,23 @@ function answer(k){
   if(ok)setTimeout(()=>{if(E.q===q&&E.sess===ss)nextQ(true);},1000);
 }
 function paintProg(){const p=document.getElementById("eProg");const ss=E.sess;if(p&&ss)p.textContent=`${Math.min(ss.i+(E.answered?0:1),ss.n)} / ${ss.n} · teisingai ${ss.ok}`;}
+/* kur gitaroje groti natą: styga su mažiausia skersine */
+function notePos(n){for(let i=OPEN.length-1;i>=0;i--)if(n>=OPEN[i])return {s:6-i,fr:n-OPEN[i]};return {s:6,fr:0};}
+function posText(n){const p=notePos(n);return `${p.s} styga, ${p.fr?p.fr+" skersinė":"atvira"}`;}
 function earStable(st){
   const q=E.q,ss=E.sess;if(!q||q.kind!=="match"||E.answered||!ss)return;const now=performance.now();
   const heard=document.getElementById("eHeard");
   if(now<E.ignoreUntil){if(heard)heard.textContent="Klausykite…";return;}
-  if(heard){heard.textContent=st?"Girdžiu: "+st.name+st.oct:"Klausau…";heard.className="heard"+(st?(st.midi===q.note?" good":" bad"):"");}
-  if(!st){E.okSince=0;return;}
-  if(st.midi===q.note||(q.note<52&&st.midi===q.note+12)){if(!E.okSince)E.okSince=now;else if(now-E.okSince>200){E.answered=true;const t=(now-E.mmT0)/1000;ss.i++;ss.ok++;ss.times.push(t);record("match",NOTES[q.note%12],true);beep(true);const fb=document.getElementById("eFb");if(fb){fb.className="efb good";fb.innerHTML=`Teisingai: <b>${q.ans}</b> per ${t.toFixed(1)} s.`;}paintProg();setTimeout(()=>{if(E.q===q&&E.sess===ss)nextQ(true);},1100);}}
-  else E.okSince=0;
+  if(!st){E.okSince=0;E.badSince=0;if(heard){heard.textContent="Klausau…";heard.className="heard";}return;}
+  const exact=st.midi===q.note||(q.note<52&&st.midi===q.note+12);const octOk=ss.level<2&&st.midi%12===q.note%12;
+  if(exact||octOk){E.badSince=0;if(heard){heard.textContent="Girdžiu: "+st.name+st.oct;heard.className="heard good";}
+    if(!E.okSince)E.okSince=now;else if(now-E.okSince>200){E.answered=true;const t=(now-E.mmT0)/1000;const ok=!q.hinted;ss.i++;if(ok)ss.ok++;ss.times.push(t);record("match",NOTES[q.note%12],ok);beep(true);const fb=document.getElementById("eFb");
+      if(fb){fb.className="efb good";fb.innerHTML=(ok?`Teisingai: <b>${q.ans}</b> per ${t.toFixed(1)} s.`:`Radote <b>${q.ans}</b> su užuomina. Kitą kartą pabandykite be jos.`)+(exact?"":`<br><span class="muted">Ta pati nata, tik kita oktava. Ji taip pat yra: ${posText(q.note)}.</span>`);}
+      paintProg();setTimeout(()=>{if(E.q===q&&E.sess===ss)nextQ(true);},exact?1100:2200);}}
+  else{E.okSince=0;if(!E.badSince)E.badSince=now;
+    /* nukreipiame: kiek ir į kurią pusę ieškoti (1–2 lygyje skaičiuojame iki artimiausios tos pačios natos bet kurioje oktavoje) */
+    let d=q.note-st.midi;if(ss.level<2){d=((d%12)+12)%12;if(d>6)d-=12;}
+    if(heard&&now-E.badSince>350){heard.className="heard bad";heard.textContent=`Girdžiu ${st.name}${st.oct}. `+(Math.abs(d)<=2?"Labai arti! ":"")+(d>0?"Ieškokite aukščiau ↑":"Ieškokite žemiau ↓")+(Math.abs(d)<=4?` (${Math.abs(d)} ${ltPl(Math.abs(d),"pustonis","pustoniai","pustonių")})`:"");}}
 }
 function gradeSess(ss){
   const mode=ss.mode;const acc=ss.ok/ss.n;
@@ -938,8 +947,8 @@ function renderEarTrain(){
   let body;
   if(m==="match"){
     body=`<div class="metro"><button class="btn primary play" id="ePlay">▶ Klausyti natos</button><span class="heard" id="eHeard">Klausau…</span><div class="efb" id="eFb"></div>
-     <div class="row"><button class="btn small" id="eSkip">Nežinau, kita nata</button><button class="btn small" id="eStop">Baigti sesiją</button></div>
-     <p class="muted" style="font-size:.88rem;text-align:center">Pirmiausia pabandykite natą padainuoti, tada ieškokite gitaroje.</p></div>`;
+     <div class="row"><button class="btn small" id="eHint">Parodyti, kur</button><button class="btn small" id="eSkip">Nežinau, kita nata</button><button class="btn small" id="eStop">Baigti sesiją</button></div>
+     <p class="muted" style="font-size:.88rem;text-align:center">Pirmiausia pabandykite natą padainuoti. Tada grokite bet kurią stygą: programėlė pasakys, ieškoti aukščiau ar žemiau.${E.sess&&E.sess.level<2?" Tinka ir ta pati nata kitoje oktavoje.":""}</p></div>`;
   }else{
     body=`<div class="metro"><button class="btn primary play" id="ePlay">▶ Klausyti dar kartą</button>
      <div class="eopts">${q.opts.map(k=>`<button class="btn eopt" data-eans="${k}">${optLabel(m,k)}</button>`).join('')}</div>
@@ -958,7 +967,8 @@ function earTrainClick(t){
   if(t.dataset.eans){answer(t.dataset.eans);return true;}
   if(t.id==="ePlay"){const d=playQ();if(E.sess&&!E.answered)E.sess.replays++;E.ignoreUntil=performance.now()+d*1000+250;return true;}
   if(t.id==="eNext"){nextQ(true);return true;}
-  if(t.id==="eSkip"){const ss=E.sess;if(ss&&E.q&&!E.answered){ss.i++;ss.times.push(Math.max(0,(performance.now()-E.mmT0)/1000));record("match",NOTES[E.q.note%12],false);const key="Nerasta "+E.q.ans;ss.conf[key]=(ss.conf[key]||0)+1;}nextQ(true);return true;}
+  if(t.id==="eHint"){const q=E.q;if(q&&q.kind==="match"&&!E.answered){q.hinted=true;const fb=document.getElementById("eFb");if(fb){fb.className="efb";fb.innerHTML=`Nata <b>${q.ans}</b>: ${posText(q.note)}. Sugrokite ją.`;}}return true;}
+  if(t.id==="eSkip"){const ss=E.sess;const q=E.q;if(ss&&q&&!E.answered){E.answered=true;ss.i++;ss.times.push(Math.max(0,(performance.now()-E.mmT0)/1000));record("match",NOTES[q.note%12],false);const key="Nerasta "+q.ans;ss.conf[key]=(ss.conf[key]||0)+1;const fb=document.getElementById("eFb");if(fb){fb.className="efb bad";fb.innerHTML=`Tai buvo <b>${q.ans}</b>: ${posText(q.note)}.`;}paintProg();setTimeout(()=>{if(E.q===q&&E.sess===ss)nextQ(true);},2500);return true;}nextQ(true);return true;}
   if(t.id==="eStop"){endSess();return true;}
   return false;
 }
@@ -1771,7 +1781,7 @@ PHASES.forEach(p=>p.ex.forEach(e=>{if(e.id==='chrom')e.seq='chrom';if(e.id==='sc
 
 function renderAll(){renderToday();renderGoals();renderTheory();renderMetro();if(!P.round)renderEar();renderEarTrain();renderCal();}
 function render(){renderAll();}
-const APP_V="2026-11-18c";
+const APP_V="2026-11-18d";
 async function checkUpdate(){try{const r=await fetch(location.pathname+"?chk="+Date.now(),{cache:"no-store"});const t=await r.text();const m=t.match(/const APP_V="([^"]+)"/);
   if(m&&m[1]!==APP_V&&!document.getElementById("updBar")){const d=document.createElement("div");d.id="updBar";d.className="note";d.style.cssText="position:fixed;left:12px;right:12px;top:12px;z-index:50;display:flex;gap:10px;align-items:center;justify-content:space-between";
     d.innerHTML='<span>Yra nauja programėlės versija.</span><button class="btn small primary" id="updGo">Atnaujinti</button>';document.body.appendChild(d);
