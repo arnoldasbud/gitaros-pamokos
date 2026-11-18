@@ -1053,6 +1053,8 @@ function chgClick(t){
 /* ---------- ritmiški keitimai ir braukimo analizė ---------- */
 /* „laiku“ riba visiems ritmo pratimams (chromatinis, gamos, akordų ritmas): ±50 ms nuo jūsų vidutinio poslinkio */
 const TOL_ON=0.05;
+/* nuolatinis jūsų poslinkis atleidžiamas tik iki 30 ms (matavimo paklaida); didesnis nuolatinis vėlavimas ar skubėjimas skaičiuojamas */
+const OFF_MAX=0.03;function offCap(x){return Math.max(-OFF_MAX,Math.min(OFF_MAX,x));}
 const RM={vq:[],vraf:0,active:false,ex:null,pair:null,bpm:60,per:4,start:0,beat:0,nextT:0,iv:null,strums:[],floor:[],lastOn:0,pend:null,last:null,result:null,curBeat:-5};
 function rmCfg(){const c=chgCfg();if(!c.rbpm)c.rbpm=60;if(!c.rper)c.rper=4;if(!c.mode)c.mode="speed";return c;}
 function rmClick(time,accent,dest){const a=AC;const o=a.createOscillator(),g=a.createGain();o.type="sine";o.frequency.value=accent?3520:2960;g.gain.setValueAtTime(0.0001,time);g.gain.exponentialRampToValueAtTime(accent?0.5:0.3,time+0.002);g.gain.exponentialRampToValueAtTime(0.0001,time+0.04);o.connect(g).connect(dest||a.destination);o.start(time);o.stop(time+0.05);}
@@ -1096,7 +1098,7 @@ function finishStrum(p){
   let correct=null,miss=[];if(ch){const ja=judge(ch,RM.pair[0]),jb=judge(ch,RM.pair[1]);const exp=rmExpected(k);const je=exp?jb:ja,jo=exp?ja:jb;correct=classify(ch,RM.pair[0],RM.pair[1])===exp;miss=je.miss;}
   const s={k,off,extra:Math.abs(off)>0.42*bd,peak:p.peak,rise:Math.max(0,p.peakT-p.t0),br,correct,miss,change:k>0&&k%RM.per===0};
   if(s.correct&&s.miss.length)noteMiss(RM.pair[rmExpected(k)],s.miss);
-  if(!s.extra){RM.offs=(RM.offs||[]).concat(off).slice(-8);}s.rel=RM.offs&&RM.offs.length>=4?off-median(RM.offs):off;RM.strums.push(s);RM.last=s;paintRhythmLive();
+  if(!s.extra){RM.offs=(RM.offs||[]).concat(off).slice(-8);}s.rel=RM.offs&&RM.offs.length>=4?off-offCap(median(RM.offs)):off;RM.strums.push(s);RM.last=s;paintRhythmLive();
 }
 function ltPl(n,a,b,c){const d=n%10,h=n%100;if(d===1&&h!==11)return a;if(d>=2&&d<=9&&!(h>=11&&h<=19))return b;return c;}
 function median(a){if(!a.length)return 0;const b=a.slice().sort((x,y)=>x-y);const m=b.length>>1;return b.length%2?b[m]:(b[m-1]+b[m])/2;}
@@ -1105,7 +1107,7 @@ function endRhythm(){
   const S0=RM.strums.filter(s=>!s.extra);const lastBeat=S0.length?Math.max(...S0.map(s=>s.k)):0;
   if(S0.length>=6){
     const normal=S0.filter(s=>!s.change);const changes=S0.filter(s=>s.change);
-    const base=median((normal.length?normal:S0).map(s=>s.off));
+    const rawBase=median((normal.length?normal:S0).map(s=>s.off));const base=offCap(rawBase);
     const dev=S0.map(s=>Math.abs(s.off-base));const onTime=dev.filter(d=>d<=TOL_ON).length;
     const chLate=changes.length?changes.reduce((a,s)=>a+s.off,0)/changes.length-base:0;
     const chOk=changes.filter(s=>s.correct&&s.off-base<=0.06).length;const chClean=changes.filter(s=>s.correct&&s.off-base<=0.06&&!s.miss.length).length;const chLateN=changes.filter(s=>s.off-base>0.06).length;
@@ -1114,7 +1116,7 @@ function endRhythm(){
     const refs=RM.pair.map(calChord).filter(Boolean);const calRef=refs.length>0;const refP=calRef?refs.reduce((a,x)=>a+x.peak,0)/refs.length:pm;const loud=pk.filter(x=>x>refP*(calRef?1.6:1.35)).length,soft=pk.filter(x=>x<refP*(calRef?0.55:0.65)).length;
     const bm=calRef?refs.reduce((a,x)=>a+x.br,0)/refs.length:median(S0.map(s=>s.br));const harsh=S0.filter(s=>bm>0&&s.br>bm*1.6).length;
     const rise=Math.round(median(S0.map(s=>s.rise))*1000);
-    const r={d:todayStr(),pair:RM.pair.join("–"),bpm:RM.bpm,per:RM.per,n:S0.length,extra:RM.strums.length-S0.length,onTime:Math.round(100*onTime/S0.length),spread:Math.round(median(dev)*1000),chLate:Math.round(chLate*1000),chLateN,changes:changes.length,chOk,chClean,missed,steady:Math.max(0,Math.round(100-100*sd/mean)),calRef,loud,soft,harsh,rise,lat:Math.round(RM.lat*1000),latSrc:RM.latSrc,rawLate:Math.round(base*1000)};
+    const r={d:todayStr(),pair:RM.pair.join("–"),bpm:RM.bpm,per:RM.per,n:S0.length,extra:RM.strums.length-S0.length,onTime:Math.round(100*onTime/S0.length),spread:Math.round(median(dev)*1000),chLate:Math.round(chLate*1000),chLateN,changes:changes.length,chOk,chClean,missed,steady:Math.max(0,Math.round(100-100*sd/mean)),calRef,loud,soft,harsh,rise,lat:Math.round(RM.lat*1000),latSrc:RM.latSrc,rawLate:Math.round(rawBase*1000)};
     const tips=[];
     if(r.missed>Math.max(2,lastBeat*0.1))tips.push("Praleidote "+r.missed+" tvaksnius. Sumažinkite tempą, kad spėtumėte užgauti kiekvieną.");
     if(r.chLateN)tips.push(r.chLateN+" "+ltPl(r.chLateN,"keitimas","keitimai","keitimų")+" pavėlavo (vidutiniškai "+Math.max(0,r.chLate)+" ms). Pradėkite kelti pirštus jau paskutiniame akordo tvaksnyje. Geriau tuščios stygos ant pirmo tvaksnio nei pavėlavęs akordas.");
@@ -1668,7 +1670,7 @@ function sqNote(p){
   if(i<0||i>=SQ.list.length)return;
   const ok=match(i);const off=pt-(SQ.start+i*sd);
   const r={i,got,off:off+(SQ.drift||0),ok,rel:off};if(!SQ.res[i]||(!SQ.res[i].ok&&ok))SQ.res[i]=r;SQ.last=r;
-  if(ok){SQ.offs=(SQ.offs||[]).concat(off+(SQ.drift||0)).slice(-8);if(SQ.offs.length>=4)SQ.drift=median(SQ.offs);}
+  if(ok){SQ.offs=(SQ.offs||[]).concat(off+(SQ.drift||0)).slice(-8);if(SQ.offs.length>=4)SQ.drift=offCap(median(SQ.offs));}
   paintSQLive();
 }
 function endSeq(){
@@ -1676,7 +1678,7 @@ function endSeq(){
   const sdE=sqSlot();const el=Math.max(0,Math.min(SQ.list.length,Math.floor((AC.currentTime-SQ.lat-SQ.start)/sdE+0.5)));if(el<SQ.list.length){SQ.list=SQ.list.slice(0,el);SQ.res=SQ.res.slice(0,el);}
   const n=SQ.list.length;const R=SQ.res;const heard=R.filter(Boolean);
   if(!n||heard.length<n*0.3){SQ.result={empty:true};paintSQ();return;}
-  const base=median(heard.filter(r=>r.ok).map(r=>r.off).concat(heard.some(r=>r.ok)?[]:heard.map(r=>r.off)));const tol=Math.min(TOL_ON,sqSlot()*0.2);
+  const base=offCap(median(heard.filter(r=>r.ok).map(r=>r.off).concat(heard.some(r=>r.ok)?[]:heard.map(r=>r.off))));const tol=Math.min(TOL_ON,sqSlot()*0.2);
   const okN=SQ.list.filter((_,i)=>R[i]&&R[i].ok).length;const onN=SQ.list.filter((_,i)=>R[i]&&R[i].ok&&Math.abs(R[i].off-base)<=tol).length;
   const errs=SQ.list.map((e,i)=>({i,s:e.s,fr:e.fr,exp:e.m,got:R[i]?R[i].got:null,miss:!R[i],late:R[i]&&R[i].ok?Math.round((R[i].off-base)*1000):0})).filter(x=>x.miss||x.got!==x.exp&&!(x.exp<52&&x.got===x.exp+12)||Math.abs(x.late)>tol*1000);
   const res={d:todayStr(),id:SQ.id,bpm:SQ.bpm,n,rounds:+(n/SQ.N).toFixed(1),ok:Math.round(100*okN/n),onTime:Math.round(100*onN/n),lat:Math.round(SQ.lat*1000),base:Math.round(base*1000),errs:errs.map(e=>({s:e.s,fr:e.fr,got:e.got,miss:e.miss,late:e.late,wrong:!e.miss&&e.got!==e.exp&&!(e.exp<52&&e.got===e.exp+12)}))};
@@ -1769,7 +1771,7 @@ PHASES.forEach(p=>p.ex.forEach(e=>{if(e.id==='chrom')e.seq='chrom';if(e.id==='sc
 
 function renderAll(){renderToday();renderGoals();renderTheory();renderMetro();if(!P.round)renderEar();renderEarTrain();renderCal();}
 function render(){renderAll();}
-const APP_V="2026-11-18b";
+const APP_V="2026-11-18c";
 async function checkUpdate(){try{const r=await fetch(location.pathname+"?chk="+Date.now(),{cache:"no-store"});const t=await r.text();const m=t.match(/const APP_V="([^"]+)"/);
   if(m&&m[1]!==APP_V&&!document.getElementById("updBar")){const d=document.createElement("div");d.id="updBar";d.className="note";d.style.cssText="position:fixed;left:12px;right:12px;top:12px;z-index:50;display:flex;gap:10px;align-items:center;justify-content:space-between";
     d.innerHTML='<span>Yra nauja programėlės versija.</span><button class="btn small primary" id="updGo">Atnaujinti</button>';document.body.appendChild(d);
