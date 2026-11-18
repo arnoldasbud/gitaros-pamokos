@@ -601,13 +601,16 @@ function accepts(cell,midi){
 }
 function beep(ok){const a=ac();if(!a)return;const t=a.currentTime;const o=a.createOscillator(),g=a.createGain();o.type="sine";o.frequency.value=ok?1318.5:220;g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(0.25,t+0.01);g.gain.exponentialRampToValueAtTime(0.0001,t+0.2);o.connect(g).connect(a.destination);o.start(t);o.stop(t+0.22);}
 
-async function micOn(){
+/* vienas mikrofono srautas: jei jau įjungtas ar įjungiamas, grąžinamas tas pats */
+function micOn(){if(P.on)return Promise.resolve(true);if(!micOn.p)micOn.p=micOn0().finally(()=>{micOn.p=null;});return micOn.p;}
+async function micOn0(){
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){toast("Ši naršyklė neleidžia naudoti mikrofono.");return false;}
   try{if(navigator.audioSession)navigator.audioSession.type="play-and-record";}catch(e){}
   const a=ac();
   try{P.stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});}
   catch(e){toast("Mikrofonas neleistas. Leiskite jį naršyklės nustatymuose.");return false;}
-  P.src=a.createMediaStreamSource(P.stream);P.an=a.createAnalyser();P.an.fftSize=2048;P.src.connect(P.an);P.buf=new Float32Array(P.an.fftSize);
+  try{if(!a)throw 0;P.src=a.createMediaStreamSource(P.stream);P.an=a.createAnalyser();P.an.fftSize=2048;P.src.connect(P.an);P.buf=new Float32Array(P.an.fftSize);}
+  catch(e){try{P.stream.getTracks().forEach(t=>t.stop());}catch(_){}P.stream=null;toast("Nepavyko prijungti mikrofono. Atjunkite Bluetooth ausines ir bandykite dar kartą.");return false;}
   P.on=true;P.hist=[];wakeOn();loop();return true;
 }
 function micOff(){P.on=false;cancelAnimationFrame(P.raf);clearInterval(P.tickIv);try{P.stream&&P.stream.getTracks().forEach(t=>t.stop());}catch(e){}try{P.src&&P.src.disconnect();}catch(e){}P.stream=null;try{if(navigator.audioSession)navigator.audioSession.type="playback";}catch(e){}wakeOff();}
@@ -660,7 +663,8 @@ function loop(){
   const now=performance.now();P.lastSt=st;
   // kol nėra naujo užgavimo arba girdime ankstesnę natą, klaidos neskaičiuojame
   const stale=P.needOnset||(P.prevMidi!=null&&st.midi%12===P.prevMidi%12&&now-R.cur.t0<2500);
-  if(accepts(R.cur.cell,st.midi)){P.badSince=0;if(heard)heard.className="heard good";if(!P.okSince)P.okSince=now;else if(now-P.okSince>200)finishItem(true,false);}
+  const ringing=P.needOnset&&P.prevMidi!=null&&st.midi%12===P.prevMidi%12;
+  if(!ringing&&accepts(R.cur.cell,st.midi)){P.badSince=0;if(heard)heard.className="heard good";if(!P.okSince)P.okSince=now;else if(now-P.okSince>200)finishItem(true,false);}
   else if(stale){P.okSince=0;P.badSince=0;if(heard){heard.className="heard";heard.textContent="Girdžiu: "+st.name+st.oct+" (ankstesnė nata, užgaukite naują)";}}
   else{P.okSince=0;if(heard)heard.className="heard bad";if(!P.badSince)P.badSince=now;else if(now-P.badSince>350&&!R.cur.wrong){R.cur.wrong=true;beep(false);paintRound();}}
 }
@@ -1075,8 +1079,8 @@ function rhythmFrame(){
   const a=AC;P.anLow.getFloatTimeDomainData(P.lbuf);let rms=0;for(let i=0;i<512;i++)rms+=P.lbuf[i]*P.lbuf[i];rms=Math.sqrt(rms/512);
   const fl=RM.floor;fl.push(rms);if(fl.length>6)fl.shift();const floor=Math.min(...fl);const t=a.currentTime;
   if(P.anHi&&t<RM.start)rmHearClick(t);
-  if(RM.pend){const p=RM.pend;if(rms>p.peak){p.peak=rms;p.peakT=t;}if(t>=p.t+0.3){RM.pend=null;finishStrum(p);}return;}
-  if(rms>Math.max(0.01,((S.cal&&S.cal.noiseLow)||0)*3)&&rms>floor*2.5&&t-RM.lastOn>0.18){RM.lastOn=t;RM.pend={t:t-0.006-(a.baseLatency||0),peak:rms,peakT:t};}
+  if(RM.pend){const p=RM.pend;if(rms>p.peak){p.peak=rms;p.peakT=t;}if(t>=p.t0+0.3){RM.pend=null;finishStrum(p);}return;}
+  if(rms>Math.max(0.01,((S.cal&&S.cal.noiseLow)||0)*3)&&rms>floor*2.5&&t-RM.lastOn>0.18){RM.lastOn=t;RM.pend={t:t-0.006-(a.baseLatency||0),t0:t,peak:rms,peakT:t};}
 }
 function rmHearClick(t){hearClk(RM,t,rmBeatDur());}
 function rmLatency(){latFinish(RM);}
@@ -1085,10 +1089,10 @@ function isGhost(prev,peak,ratio){const L=prev.slice(-8);return L.length>=3&&pea
 function brightness(){const an=P.an2,hz=AC.sampleRate/an.fftSize;let lo=0,hi=0;for(let i=Math.floor(75/hz);i<Math.ceil(2400/hz);i++){const db=P.fbuf[i];if(!isFinite(db))continue;const p=Math.pow(10,db/10);if(i*hz<1000)lo+=p;else hi+=p;}return lo>0?hi/lo:0;}
 function finishStrum(p){
   if(isGhost(RM.strums.filter(s=>!s.extra).map(s=>s.peak),p.peak,0.3)){RM.ghost=(RM.ghost||0)+1;return;}
-  rmLatency();const bd=rmBeatDur();const pt=p.t-RM.lat;const k=Math.round((pt-RM.start)/bd);if(k<0)return;
+  const bd=rmBeatDur();if(Math.round((p.t-RM.lat-RM.start)/bd)<0)return;rmLatency();const pt=p.t-RM.lat;const k=Math.round((pt-RM.start)/bd);if(k<0)return;
   const off=pt-(RM.start+k*bd);const ch=chroma();const br=brightness();
   let correct=null,miss=[];if(ch){const ja=judge(ch,RM.pair[0]),jb=judge(ch,RM.pair[1]);const exp=rmExpected(k);const je=exp?jb:ja,jo=exp?ja:jb;correct=classify(ch,RM.pair[0],RM.pair[1])===exp;miss=je.miss;}
-  const s={k,off,extra:Math.abs(off)>0.42*bd,peak:p.peak,rise:Math.max(0,p.peakT-p.t),br,correct,miss,change:k>0&&k%RM.per===0};
+  const s={k,off,extra:Math.abs(off)>0.42*bd,peak:p.peak,rise:Math.max(0,p.peakT-p.t0),br,correct,miss,change:k>0&&k%RM.per===0};
   if(s.correct&&s.miss.length)noteMiss(RM.pair[rmExpected(k)],s.miss);
   RM.strums.push(s);RM.last=s;paintRhythmLive();
 }
@@ -1191,16 +1195,16 @@ function fullRms(){P.an.getFloatTimeDomainData(P.buf);let r=0;for(let i=0;i<P.bu
 async function calStart(step,target){
   if(CAL.active)calStop();
   Object.assign(CAL,{lv:null,rejects:0,lastRaw:null,lst:null,step,target,got:[],pend:null,floor:[],lastOn:0,noiseAcc:[],msg:"",t0:performance.now()});
-  const ok=await micOn();if(!ok){renderCal();return;}ensureAnalysers();CAL.active=true;CAL.t0=performance.now();
+  const tok=CAL.tok=(CAL.tok||0)+1;const ok=await micOn();if(tok!==CAL.tok||document.getElementById("v-cal").hidden){if(ok&&!CAL.active)micOff();return;}if(!ok){renderCal();return;}ensureAnalysers();CAL.active=true;CAL.t0=performance.now();
   if(step==="lat"){const a=AC;const hp1=a.createBiquadFilter(),hp2=a.createBiquadFilter();hp1.type=hp2.type="highpass";hp1.frequency.value=hp2.frequency.value=2400;P.anHi=a.createAnalyser();P.anHi.fftSize=2048;P.src.connect(hp1);hp1.connect(hp2);hp2.connect(P.anHi);P.hbuf=new Float32Array(2048);
-    const st=a.currentTime+0.5;CAL.lst={start:st,clk:[],lastClk:0,bd:0.75};for(let k=0;k<10;k++)rmClick(st+k*0.75,k===0);}
+    const st=a.currentTime+0.5;CAL.lst={start:st,clk:[],lastClk:0,bd:0.75};const bus=busOn(CAL);for(let k=0;k<10;k++)rmClick(st+k*0.75,k===0,bus);}
   renderCal();
 }
 function calLatFrame(){const L=CAL.lst;const t=AC.currentTime;if(!L||!P.anHi)return;hearClk(L,t,L.bd,0,9);
   if(t>L.start+10*L.bd+0.7){const c=L.clk;let v=null;if(c.length>=4){const md=median(c);const good=c.filter(x=>Math.abs(x-md)<0.02);if(good.length>=4)v=median(good);}
     calStop();if(v!=null){S.latCal={v,d:todayStr()};S.rmLat=v;save();CAL.msg=`Telefono vėlavimas ${Math.round(v*1000)} ms. Jis bus atimamas visuose ritmo pratimuose.`;}
     else CAL.msg="Nepavyko aiškiai išgirsti spragtelėjimų. Padidinkite garsą, nenaudokite ausinių, kambaryje turi būti tylu, ir pakartokite.";renderCal();}}
-function calStop(){CAL.active=false;CAL.step=null;CAL.target=null;micOff();P.an2=null;P.anLow=null;P.anHi=null;}
+function calStop(){CAL.tok=(CAL.tok||0)+1;busOff(CAL);CAL.active=false;CAL.step=null;CAL.target=null;micOff();P.an2=null;P.anLow=null;P.anHi=null;}
 function calFrame(){
   if(CAL.step==="lat"){calLatFrame();return;}
   if(!P.anLow)return;const now=performance.now();const low=lowRms();
