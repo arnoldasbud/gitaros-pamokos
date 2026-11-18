@@ -599,7 +599,9 @@ function accepts(cell,midi){
   if(cell.m<52&&ok.some(m=>m+12===midi))return true;
   return false;
 }
-function beep(ok){const a=ac();if(!a)return;const t=a.currentTime;const o=a.createOscillator(),g=a.createGain();o.type="sine";o.frequency.value=ok?1318.5:220;g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(0.25,t+0.01);g.gain.exponentialRampToValueAtTime(0.0001,t+0.2);o.connect(g).connect(a.destination);o.start(t);o.stop(t+0.22);}
+/* telefono garsiakalbis šalia mikrofono: savo pyptelėjimo neklausome (jo trukmė + vėlavimas) */
+function selfLat(){return outLat()+(S.rmLat||0);}
+function beep(ok){const a=ac();if(!a)return;P.muteUntil=performance.now()+300+selfLat()*1000;const t=a.currentTime;const o=a.createOscillator(),g=a.createGain();o.type="sine";o.frequency.value=ok?1318.5:220;g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(0.25,t+0.01);g.gain.exponentialRampToValueAtTime(0.0001,t+0.2);o.connect(g).connect(a.destination);o.start(t);o.stop(t+0.22);}
 
 /* vienas mikrofono srautas: jei jau įjungtas ar įjungiamas, grąžinamas tas pats */
 function micOn(){if(P.on)return Promise.resolve(true);if(!micOn.p)micOn.p=micOn0().finally(()=>{micOn.p=null;});return micOn.p;}
@@ -648,7 +650,7 @@ function stopRound(){if(P.round&&P.round.items.length>0){endRound();}else{P.roun
 let frameFlip=false;
 function loop(){
   if(!P.on)return;P.raf=requestAnimationFrame(loop);if(CAL.active){calFrame();return;}if(RM.active){if(P.anLow)rhythmFrame();return;}if(SQ.active){sqFrame();return;}if(CH2.active){chordFrame();return;}frameFlip=!frameFlip;if(frameFlip)return;
-  P.an.getFloatTimeDomainData(P.buf);const f=detectPitch(P.buf,AC.sampleRate);
+  P.an.getFloatTimeDomainData(P.buf);const f=performance.now()<(P.muteUntil||0)?-1:detectPitch(P.buf,AC.sampleRate);
   {let r=0;const b=P.buf;for(let i=0;i<b.length;i+=2)r+=b[i]*b[i];r=Math.sqrt(2*r/b.length);P.rfl=P.rfl||[];const fl=P.rfl.length?Math.min(...P.rfl):r;P.rfl.push(r);if(P.rfl.length>6)P.rfl.shift();
    // naujas užgavimas: garsas staiga išauga virš ankstesnio lygio
    if(P.needOnset&&r>0.012&&r>fl*1.8){P.needOnset=false;P.hist=[];}}
@@ -848,7 +850,7 @@ function startSess(fix){
 function nextQ(play){
   const ss=E.sess;if(ss&&ss.i>=ss.n){endSess();return;}
   E.q=makeQ();E.answered=false;E.okSince=0;E.badSince=0;renderEarTrain();
-  if(play){const d=playQ();E.ignoreUntil=performance.now()+d*1000+250;E.readyAt=performance.now()+d*1000;E.mmT0=E.readyAt;}
+  if(play){const d=playQ();E.ignoreUntil=performance.now()+d*1000+310+selfLat()*1000;E.readyAt=performance.now()+d*1000;E.mmT0=E.readyAt;}
 }
 function answer(k){
   const q=E.q,ss=E.sess;if(!q)return;
@@ -871,7 +873,7 @@ function posText(n){const p=notePos(n);return `${p.s} styga, ${p.fr?p.fr+" skers
 function earStable(st){
   const q=E.q,ss=E.sess;if(!q||q.kind!=="match"||E.answered||!ss)return;const now=performance.now();
   const heard=document.getElementById("eHeard");
-  if(now<E.ignoreUntil){if(heard)heard.textContent="Klausykite…";return;}
+  if(now<E.ignoreUntil){P.hist=[];if(heard)heard.textContent="Klausykite…";return;}
   if(!st){E.okSince=0;E.badSince=0;if(heard){heard.textContent="Klausau…";heard.className="heard";}return;}
   const exact=st.midi===q.note||(q.note<52&&st.midi===q.note+12);const octOk=ss.level<2&&st.midi%12===q.note%12;
   if(exact||octOk){E.badSince=0;if(heard){heard.textContent="Girdžiu: "+st.name+st.oct;heard.className="heard good";}
@@ -1626,7 +1628,7 @@ async function startSeq(id,bpm,loopSecs){
   Object.assign(SQ,{active:true,id,bpm,sub:SEQS[id].sub,N:base.length,loop:!!loopSecs,list:[].concat(...Array(reps).fill(base)),clk:[],lastClk:0,lat:S.rmLat||0,latDone:false,latOk:false,drift:0,offs:[],peaks:[],prevGot:null,floor:[],lastOn:0,pend:null,res:[],last:null,result:null,curSlot:-1});
   paintSQ();const ok=await micOn();if(!SQ.active){if(ok)micOff();return;}
   if(!ok){SQ.active=false;paintSQ();return;}
-  const a=AC;const lp1=a.createBiquadFilter(),lp2=a.createBiquadFilter();lp1.type=lp2.type="lowpass";lp1.frequency.value=lp2.frequency.value=1400;P.anLow=a.createAnalyser();P.anLow.fftSize=512;P.src.connect(lp1);lp1.connect(lp2);lp2.connect(P.anLow);P.lbuf=new Float32Array(512);
+  const a=AC;const lp1=a.createBiquadFilter(),lp2=a.createBiquadFilter();lp1.type=lp2.type="lowpass";lp1.frequency.value=lp2.frequency.value=900;P.anLow=a.createAnalyser();P.anLow.fftSize=512;P.src.connect(lp1);lp1.connect(lp2);lp2.connect(P.anLow);P.lbuf=new Float32Array(512);
   const hp1=a.createBiquadFilter(),hp2=a.createBiquadFilter();hp1.type=hp2.type="highpass";hp1.frequency.value=hp2.frequency.value=2400;P.anHi=a.createAnalyser();P.anHi.fftSize=2048;P.src.connect(hp1);hp1.connect(hp2);hp2.connect(P.anHi);P.hbuf=new Float32Array(2048);
   const bd=60/SQ.bpm;SQ.beat=-4;SQ.nextT=a.currentTime+0.25;SQ.start=SQ.nextT+4*bd;clearInterval(SQ.iv);busOn(SQ);SQ.iv=setInterval(sqSched,25);paintSQ();
   const vis=[...document.querySelectorAll("[data-sqbox]")].find(b=>b.offsetParent);if(vis)try{vis.scrollIntoView({behavior:"smooth",block:"center"});}catch(e){}
@@ -1668,6 +1670,8 @@ function sqFrame(){
 function sqNote(p){
   /* drift: asmeninis/likęs vėlavimas, išmatuotas iš paskutinių teisingų natų; jis atimamas prieš priskiriant natą tvaksniui */
   const sd=sqSlot();const pt=p.t-SQ.lat-(SQ.drift||0);
+  /* spragsėjimai mikrofone atrodo kaip ~880–990 Hz natos; gitaros natos šiuose pratimuose žemesnės nei G5 */
+  if(p.det.length&&!p.det.some(m=>m<79))return;p.det=p.det.filter(m=>m<79);
   let got=null;if(p.det.length){const c={};p.det.forEach(m=>c[m]=(c[m]||0)+1);got=+Object.keys(c).sort((x,y)=>c[y]-c[x])[0];}
   const match=i=>{const ex=SQ.list[i];return ex&&got!=null&&(got===ex.m||(ex.m<52&&got===ex.m+12));};
   let i=Math.round((pt-SQ.start)/sd);
@@ -1781,7 +1785,7 @@ PHASES.forEach(p=>p.ex.forEach(e=>{if(e.id==='chrom')e.seq='chrom';if(e.id==='sc
 
 function renderAll(){renderToday();renderGoals();renderTheory();renderMetro();if(!P.round)renderEar();renderEarTrain();renderCal();}
 function render(){renderAll();}
-const APP_V="2026-11-18d";
+const APP_V="2026-11-18e";
 async function checkUpdate(){try{const r=await fetch(location.pathname+"?chk="+Date.now(),{cache:"no-store"});const t=await r.text();const m=t.match(/const APP_V="([^"]+)"/);
   if(m&&m[1]!==APP_V&&!document.getElementById("updBar")){const d=document.createElement("div");d.id="updBar";d.className="note";d.style.cssText="position:fixed;left:12px;right:12px;top:12px;z-index:50;display:flex;gap:10px;align-items:center;justify-content:space-between";
     d.innerHTML='<span>Yra nauja programėlės versija.</span><button class="btn small primary" id="updGo">Atnaujinti</button>';document.body.appendChild(d);
