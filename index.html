@@ -483,7 +483,17 @@ function renderTheory(){
 }
 
 /* ---------- metronome ---------- */
-const M={bpm:60,running:false,beat:0,next:0,iv:null,per:4};
+const M={bpm:60,running:false,beat:0,next:0,iv:null,per:4,vq:[],vraf:0};
+/* Laikas: spragsėjimai planuojami Web Audio laikrodžiu (tikslumas iki mėginio). Planuojame LOOK s į priekį,
+   kad apkrautas puslapis nespėtų pavėluoti. Jei planuoklis vis tiek atsiliko, praleistas tvaksnis neišgrojamas pavėluotai,
+   o tinklelis pratęsiamas. Indikacija rodoma tada, kai spragsėjimas iš tikrųjų pasiekia garsiakalbį (atimamas išvesties vėlavimas). */
+const LOOK=0.25;
+function outLat(){const a=AC;return a?(a.outputLatency||0)+(a.baseLatency||0):0;}
+function vizPush(st,t,v,fn){st.vq.push({t,v});st.vfn=fn;if(!st.vraf)st.vraf=requestAnimationFrame(()=>vizRun(st));}
+function vizRun(st){st.vraf=0;if(!AC||!st.vq.length)return;const h=AC.currentTime-outLat();let x=null;while(st.vq.length&&st.vq[0].t<=h)x=st.vq.shift();if(x)st.vfn(x.v);if(st.vq.length)st.vraf=requestAnimationFrame(()=>vizRun(st));}
+function vizStop(st){if(st.vraf)cancelAnimationFrame(st.vraf);st.vraf=0;st.vq=[];}
+function mDots(b){document.querySelectorAll("#beats i").forEach((d,i)=>d.classList.toggle("on",i===b));}
+
 function renderMetro(){
   const v=document.getElementById("v-metro");
   v.innerHTML=`<div class="head"><span class="eyebrow">Metronomas</span><h1>Tempas</h1><p class="muted">Pradėkite lėtai. Tempą kelkite po 5 bpm tik tada, kai 3 kartus iš eilės grojate švariai.</p></div>
@@ -495,9 +505,9 @@ function renderMetro(){
   </div>`;
 }
 function setBpm(b){M.bpm=Math.max(40,Math.min(200,b));const a=document.getElementById("bpmv");if(a)a.textContent=M.bpm;const r=document.getElementById("bpmr");if(r)r.value=M.bpm;}
-function sched(){const a=AC;while(M.next<a.currentTime+0.12){const b=M.beat;click(M.next,b===0);const delay=Math.max(0,(M.next-a.currentTime)*1000);setTimeout(()=>{const dots=document.querySelectorAll("#beats i");dots.forEach((d,i)=>d.classList.toggle("on",i===b));},delay);M.next+=60/M.bpm;M.beat=(M.beat+1)%M.per;}}
-function startM(){const a=ac();if(!a){toast("Šis įrenginys negroja garso.");return;}M.running=true;M.beat=0;M.next=a.currentTime+0.06;clearInterval(M.iv);M.iv=setInterval(sched,25);wakeOn();const g=document.getElementById("mgo");if(g)g.textContent="Stop";}
-function stopM(){M.running=false;M.byTimer=false;clearInterval(M.iv);document.querySelectorAll("#beats i").forEach(d=>d.classList.remove("on"));wakeOff();const g=document.getElementById("mgo");if(g)g.textContent="Pradėti";}
+function sched(){const a=AC;if(!M.running)return;const bd=60/M.bpm;if(M.next<a.currentTime-0.005){const n=Math.ceil((a.currentTime-M.next)/bd);M.next+=n*bd;M.beat=(M.beat+n)%M.per;}while(M.next<a.currentTime+LOOK){const b=M.beat;click(M.next,b===0);vizPush(M,M.next,b,mDots);M.next+=60/M.bpm;M.beat=(M.beat+1)%M.per;}}
+function startM(){const a=ac();if(!a){toast("Šis įrenginys negroja garso.");return;}M.running=true;M.beat=0;M.next=a.currentTime+0.06;clearInterval(M.iv);vizStop(M);M.iv=setInterval(sched,25);wakeOn();const g=document.getElementById("mgo");if(g)g.textContent="Stop";}
+function stopM(){M.running=false;M.byTimer=false;clearInterval(M.iv);vizStop(M);document.querySelectorAll("#beats i").forEach(d=>d.classList.remove("on"));wakeOff();const g=document.getElementById("mgo");if(g)g.textContent="Pradėti";}
 
 /* ---------- wiring ---------- */
 /* išjungia visus mikrofono režimus ir su jais susijusį laikmatį, kad naujas režimas gautų mikrofoną */
@@ -1028,15 +1038,17 @@ function chgClick(t){
 
 
 /* ---------- ritmiški keitimai ir braukimo analizė ---------- */
-const RM={active:false,ex:null,pair:null,bpm:60,per:4,start:0,beat:0,nextT:0,iv:null,strums:[],floor:[],lastOn:0,pend:null,last:null,result:null,curBeat:-5};
+const RM={vq:[],vraf:0,active:false,ex:null,pair:null,bpm:60,per:4,start:0,beat:0,nextT:0,iv:null,strums:[],floor:[],lastOn:0,pend:null,last:null,result:null,curBeat:-5};
 function rmCfg(){const c=chgCfg();if(!c.rbpm)c.rbpm=60;if(!c.rper)c.rper=4;if(!c.mode)c.mode="speed";return c;}
 function rmClick(time,accent){const a=AC;const o=a.createOscillator(),g=a.createGain();o.type="sine";o.frequency.value=accent?3520:2960;g.gain.setValueAtTime(0.0001,time);g.gain.exponentialRampToValueAtTime(accent?0.5:0.3,time+0.002);g.gain.exponentialRampToValueAtTime(0.0001,time+0.04);o.connect(g).connect(a.destination);o.start(time);o.stop(time+0.05);}
+function rmShow(k){if(!RM.active)return;RM.curBeat=k;paintRhythmLive();}
 function rmBeatDur(){return 60/RM.bpm;}
 function rmExpected(k){return Math.floor(Math.max(0,k)/RM.per)%2;}
 function rmSched(){
-  const a=AC;while(RM.nextT<a.currentTime+0.12){const k=RM.beat;const acc=k<0||k%RM.per===0;rmClick(RM.nextT,acc);
-    const delay=Math.max(0,(RM.nextT-a.currentTime)*1000);setTimeout(()=>{RM.curBeat=k;paintRhythmLive();},delay);
-    RM.nextT+=rmBeatDur();RM.beat++;}
+  const a=AC;if(!RM.active)return;const bd=rmBeatDur();while(RM.nextT<a.currentTime-0.005){RM.nextT+=bd;RM.beat++;}
+  while(RM.nextT<a.currentTime+LOOK){const k=RM.beat;const acc=k<0||k%RM.per===0;rmClick(RM.nextT,acc);
+    vizPush(RM,RM.nextT,k,rmShow);
+    RM.nextT+=bd;RM.beat++;}
 }
 async function startRhythm(ex){
   if(RM.active)return;if(M.running)stopM();const c=rmCfg();
@@ -1048,7 +1060,7 @@ async function startRhythm(ex){
   P.an2=a.createAnalyser();P.an2.fftSize=8192;P.an2.smoothingTimeConstant=0;P.src.connect(P.an2);P.fbuf=new Float32Array(P.an2.frequencyBinCount);
   // metronomo spragsėjimo girdėjimas per mikrofoną: išmatuojame telefono garso vėlavimą
   const hp1=a.createBiquadFilter(),hp2=a.createBiquadFilter();hp1.type=hp2.type="highpass";hp1.frequency.value=hp2.frequency.value=2400;P.anHi=a.createAnalyser();P.anHi.fftSize=2048;P.src.connect(hp1);hp1.connect(hp2);hp2.connect(P.anHi);P.hbuf=new Float32Array(2048);
-  RM.beat=-4;RM.nextT=a.currentTime+0.25;RM.start=RM.nextT+4*rmBeatDur();clearInterval(RM.iv);RM.iv=setInterval(rmSched,25);paintChg();
+  RM.beat=-4;RM.nextT=a.currentTime+0.25;RM.start=RM.nextT+4*rmBeatDur();clearInterval(RM.iv);vizStop(RM);RM.iv=setInterval(rmSched,25);paintChg();
 }
 function rhythmFrame(){
   const a=AC;P.anLow.getFloatTimeDomainData(P.lbuf);let rms=0;for(let i=0;i<512;i++)rms+=P.lbuf[i]*P.lbuf[i];rms=Math.sqrt(rms/512);
@@ -1074,7 +1086,7 @@ function finishStrum(p){
 function ltPl(n,a,b,c){const d=n%10,h=n%100;if(d===1&&h!==11)return a;if(d>=2&&d<=9&&!(h>=11&&h<=19))return b;return c;}
 function median(a){if(!a.length)return 0;const b=a.slice().sort((x,y)=>x-y);const m=b.length>>1;return b.length%2?b[m]:(b[m-1]+b[m])/2;}
 function endRhythm(){
-  if(!RM.active)return;RM.active=false;clearInterval(RM.iv);micOff();P.an2=null;P.anLow=null;P.anHi=null;
+  if(!RM.active)return;RM.active=false;clearInterval(RM.iv);vizStop(RM);micOff();P.an2=null;P.anLow=null;P.anHi=null;
   const S0=RM.strums.filter(s=>!s.extra);const lastBeat=S0.length?Math.max(...S0.map(s=>s.k)):0;
   if(S0.length>=6){
     const normal=S0.filter(s=>!s.change);const changes=S0.filter(s=>s.change);
@@ -1594,7 +1606,8 @@ async function startSeq(id,bpm,loopSecs){
 }
 function sqSched(){
   const a=AC;const bd=60/SQ.bpm;const lastT=SQ.start+(SQ.list.length-1)*sqSlot();
-  while(SQ.nextT<a.currentTime+0.12){if(SQ.nextT<=lastT+0.01)rmClick(SQ.nextT,SQ.beat<0||SQ.beat%4===0);SQ.nextT+=bd;SQ.beat++;}
+  while(SQ.nextT<a.currentTime-0.005){SQ.nextT+=bd;SQ.beat++;}
+  while(SQ.nextT<a.currentTime+LOOK){if(SQ.nextT<=lastT+0.01)rmClick(SQ.nextT,SQ.beat<0||SQ.beat%4===0);SQ.nextT+=bd;SQ.beat++;}
   const slot=Math.floor((a.currentTime-SQ.start)/sqSlot()+0.5);if(slot!==SQ.curSlot){SQ.curSlot=slot;paintSQLive();}
   if(a.currentTime>lastT+0.6+SQ.lat)endSeq();
 }
