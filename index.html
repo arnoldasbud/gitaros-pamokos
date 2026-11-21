@@ -362,7 +362,7 @@ function save(){
 function doneToday(){const t=todayStr();return (S.done[t]||[]);}
 function secsToday(){return S.log[todayStr()]||0;}
 function addSecs(s){if(s<=0)return;const t=todayStr();S.log[t]=(S.log[t]||0)+Math.round(s);}
-function markDone(id,on){const t=todayStr();const a=new Set(S.done[t]||[]);on?a.add(id):a.delete(id);S.done[t]=[...a];}
+function markDone(id,on){const t=todayStr();if(id==="lesson")lsnMark(on);const a=new Set(S.done[t]||[]);on?a.add(id):a.delete(id);S.done[t]=[...a];}
 function streak(){let n=0;const d=new Date();if(!(S.log[todayStr(d)]>=60))d.setDate(d.getDate()-1);while(S.log[todayStr(d)]>=60){n++;d.setDate(d.getDate()-1);}return n;}
 function phaseGoals(){return PHASES[S.phase].goals.map((_,i)=>goalState(S.phase,i).ok);}
 
@@ -402,7 +402,7 @@ function week2(){return practiceDay()>7;}
 function songIdx(){return ((S.songPick||{})[S.phase])||0;}
 function liveEx(e){if(e.song&&e.opts){const o=e.opts[Math.min(songIdx(),e.opts.length-1)];return Object.assign({},e,o);}
   if(e.alt&&week2())return Object.assign({},e,e.alt,{wk2:true});return e;}
-function curEx(){const all=PHASES[S.phase].ex.map(liveEx);return S.shortDay===todayStr()?shortPlan(all):all;}
+function curEx(){const all=PHASES[S.phase].ex.map(liveEx).map(e=>e.lesson&&lsnMode().k==="quiz"?Object.assign({},e,{m:3,h:"Etapo pamokos išeitos, todėl šiandien trumpas testas. Taip patikrinsite, ar viskas įsiminta."}):e);return S.shortDay===todayStr()?shortPlan(all):all;}
 /* trumpa diena (~10 min): apšilimas 1 min ir svarbiausi pratimai po 3 min */
 function shortPlan(all){const pick=[];const add=e=>{if(e&&!pick.includes(e))pick.push(e);};
   add(all.find(e=>e.id==="warm"));add(all.find(e=>e.song));add(all.find(e=>e.changes&&!e.song));add(all.find(e=>e.seq));add(all.find(e=>e.drill));
@@ -481,13 +481,13 @@ function statsHtml(){
 function paintStats(){const el=document.getElementById("stats");if(el)el.outerHTML=statsHtml();}
 
 function renderToday(){
-  const v=document.getElementById("v-today");const dn=doneToday();const open=v.querySelector("details[open]");const openId=open?open.dataset.id:null;
+  const v=document.getElementById("v-today");const dn=doneToday();const open=v.querySelector("details.ex[open]");const openId=open?open.dataset.id:null;
   const sd=S.shortDay===todayStr();
   let h=stageHeader()+`<button class="btn small" id="calOpen" style="align-self:flex-start">${calReady()?"Gitaros pritaikymas ✓":"Pritaikyti programėlę savo gitarai"}</button>`+fretStrip()+statsHtml()+weekHtml()+recsHtml()+`<h2 style="margin-top:8px">Šiandienos pratimai${sd?' · trumpa diena':''}</h2><div class="row" style="justify-content:flex-start"><button class="btn small" id="shortDay" ${tog(sd)}>${sd?'Grįžti į visą programą':'Turiu tik 10 min: trumpa diena'}</button></div>${sd?'<span class="muted" style="font-size:.88rem">Apšilimas ir svarbiausi pratimai po 3 min. Rytoj vėl bus visa programa.</span>':''}`;
   curEx().forEach(ex=>{
     const d=dn.includes(ex.id);
     h+=`<details class="ex ${d?'done':''}" data-id="${ex.id}" ${openId===ex.id?'open':''}>
-      <summary><span class="chk" aria-hidden="true"></span><span class="t"><h3>${esc(ex.drill?focusTitle():ex.lesson?"Dienos teorija: "+(lessonsOf(S.phase)[lessonIdx()]||{}).t:ex.n)}</h3>${ex.wk2?'<span class="pill">2 savaitės variantas</span>':''}${ex.bpm?`<span class="pill">${ex.seq?sqBpm(ex.seq,ex.bpm):ex.song?songCfg(ex.n,ex.bpm).rbpm:ex.bpm} bpm</span>`:''}</span><span class="min">${ex.m} min</span></summary>
+      <summary><span class="chk" aria-hidden="true"></span><span class="t"><h3>${esc(ex.drill?focusTitle():ex.lesson?lessonTitle():ex.n)}</h3>${ex.wk2?'<span class="pill">2 savaitės variantas</span>':''}${ex.bpm?`<span class="pill">${ex.seq?sqBpm(ex.seq,ex.bpm):ex.song?songCfg(ex.n,ex.bpm).rbpm:ex.bpm} bpm</span>`:''}</span><span class="min">${ex.m} min</span></summary>
       <div class="body"><p>${esc(ex.h)}</p>
         ${ex.eartr?earTodayHtml(ex):`<div class="timer"><span class="clock" data-clock="${ex.id}">${fmt(ex.m*60)}</span>
           <button class="btn primary" data-start="${ex.id}">Pradėti</button>
@@ -517,7 +517,7 @@ function renderGoals(){
   const all=p.goals.every((_,i)=>g[i]);const last=S.phase===PHASES.length-1;
   let h=`<div class="head"><span class="eyebrow">${S.phase+1} etapo tikslai</span><h1>Ką turiu mokėti</h1><p class="muted">Tikslai vertinami pagal jūsų rezultatus. Praktinis tikslas įskaitomas, kai jį įvykdote 3 skirtingas dienas, teorijos tikslas, kai teste atsakote bent 9 iš 10. Kai pasieksite visus, programėlė pati pereis į kitą etapą. Į ankstesnį etapą galite grįžti skiltyje „Visas kelias“.</p></div>`;
   if(S.phaseAuto&&S.phaseAuto.to===S.phase&&S.phaseAuto.d===todayStr())h+=`<div class="note"><b>Visi ${S.phase} etapo tikslai pasiekti, todėl automatiškai pereita į ${S.phase+1} etapą.</b></div>`;
-  if(QZ.active){v.innerHTML=h+quizHtml();return;}
+  if(QZ.active&&!QZ.inline){v.innerHTML=h+quizHtml();return;}
   h+=`<div class="drill" data-scbox>${(SC.active||SC.done)&&!SC.ex?scHtml():''}</div>`;
   if(GV.sq)h+=`<div class="drill" data-sqbox="${GV.sq.id}" data-sqbpm="${GV.sq.bpm}">${sqHtml(GV.sq.id,GV.sq.bpm)}</div>`;
   p.goals.forEach((t,i)=>{const st=goalState(S.phase,i);
@@ -562,7 +562,7 @@ function goPhase(n){S.maxPhase=Math.max(S.maxPhase||0,S.phase,n);S.phase=n;S.pha
 
 function renderTheory(){
   const v=document.getElementById("v-theory");const p=PHASES[S.phase];
-  let h=`<div class="head"><span class="eyebrow">${S.phase+1} etapo teorija</span><h1>${esc(p.title)}</h1></div><article class="theory">${p.theory}</article>`;
+  let h=`<div class="head"><span class="eyebrow">${S.phase+1} etapo teorija</span><h1>${esc(p.title)}</h1><p class="muted">Tai žinynas. Pamokos ir testai kasdien pateikiami dienos užduotyse paeiliui, čia galite jas peržiūrėti visas iš karto.</p></div><article class="theory">${p.theory}</article>`;
   if(S.phase>0){h+='<h2 style="margin-top:8px">Ankstesni etapai</h2>';for(let i=S.phase-1;i>=0;i--){h+=`<details class="other"><summary>${i+1}. ${esc(PHASES[i].title)}</summary><div class="theory" style="border:0;padding:12px 0 0">${PHASES[i].theory}</div></details>`;}}
   const qg=(GD[S.phase]||[]).map((g,i)=>g.k==="quiz"?i:-1).filter(i=>i>=0);
   if(qg.length)h+=`<div class="theory" style="gap:10px"><h3>Pasitikrinkite</h3><p class="muted">10 klausimų testas. Tikslas įskaitomas, kai atsakote bent 9.</p><div class="row" style="justify-content:flex-start">${qg.map(i=>`<button class="btn small primary" data-qz="${S.phase}:${i}">Testas: ${esc(QT[GD[S.phase][i].t[0]].t)}</button>`).join('')}</div></div>`;
@@ -1747,7 +1747,7 @@ function goalState(ph,i){
   const g=(GD[ph]||[])[i]||{k:"self"};
   if(g.k==="self"){const ok=!!((S.goals[ph]||[])[i]);return {g,ok,pct:ok?1:0,txt:"Šį tikslą pažymite patys, kai jį įvykdote 3 dienas."};}
   if(g.k==="quiz"){const H=(S.quizHist||[]).filter(x=>x.ph===ph&&x.gi===i);const best=H.length?Math.max(...H.map(x=>x.score)):0;const ok=H.some(x=>x.score>=9);
-    return {g,ok,pct:ok?1:best/9,txt:ok?`Testas išlaikytas (${best}/10).`:H.length?`Geriausias rezultatas ${best}/10, reikia 9/10.`:"Testas dar nelaikytas. Reikia 9 iš 10.",act:`<button class="btn small ${ok?'':'primary'}" data-qz="${ph}:${i}">${ok?'Laikyti dar kartą':'Laikyti testą'}</button>`};}
+    return {g,ok,pct:ok?1:best/9,txt:ok?`Testas išlaikytas (${best}/10).`:H.length?`Geriausias rezultatas ${best}/10, reikia 9/10.`:`Testas dar nelaikytas. Reikia 9 iš 10. Jis atsiras dienos užduotyse, kai išeisite visas etapo pamokas${ph===S.phase?" (išeita "+Math.min(lsnSt().n,lessonsOf(ph).length)+" iš "+lessonsOf(ph).length+")":""}.`,act:`<button class="btn small ${ok?'':'primary'}" data-qz="${ph}:${i}">${ok?'Laikyti dar kartą':'Laikyti testą'}</button>`};}
   if(g.k==="chg"){const H=(S.chHist||[]).filter(x=>x.pair===g.pair);const good=H.filter(x=>x.cleanPerMin>=g.n);const d=uDays(good);const best=H.length?Math.max(...H.map(x=>x.cleanPerMin)):0;
     return {g,ok:d>=NEED_DAYS,pct:Math.min(1,d/NEED_DAYS*0.6+Math.min(1,best/g.n)*0.4),txt:`Geriausias ${best} švarių/min. Dienų su ${g.n}+: ${Math.min(d,NEED_DAYS)} iš ${NEED_DAYS}.`};}
   if(g.k==="seq"){const H=(S.sqHist||[]).filter(x=>x.id===g.id&&x.bpm>=g.bpm);const good=H.filter(x=>x.ok>=90&&x.onTime>=80);const d=uDays(good);const last=(S.sqHist||[]).filter(x=>x.id===g.id).pop();
@@ -1764,21 +1764,22 @@ function chName(c){return c==="Fb"?"F barė":c;}
 
 /* ---------- testas ---------- */
 const QZ={active:false,ph:0,gi:0,qs:[],i:0,score:0,ans:null,wrong:[],done:false};
-function startQuiz(ph,gi){const g=GD[ph][gi];Object.assign(QZ,{active:true,ph,gi,qs:quizQs(g.t,10),i:0,score:0,ans:null,wrong:[],done:false,t0:Date.now()});renderGoals();show("goals");window.scrollTo(0,0);}
+function qzRender(){if(QZ.inline)renderToday();else renderGoals();}
+function startQuiz(ph,gi,inline){if(inline){Object.assign(QZ,{active:true,inline:true,ph,gi,qs:quizQs(GD[ph][gi].t,10),i:0,score:0,ans:null,wrong:[],done:false,t0:Date.now()});renderToday();return;}const g=GD[ph][gi];Object.assign(QZ,{inline:false,active:true,ph,gi,qs:quizQs(g.t,10),i:0,score:0,ans:null,wrong:[],done:false,t0:Date.now()});renderGoals();show("goals");window.scrollTo(0,0);}
 function quizHtml(){
   const g=PHASES[QZ.ph].goals[QZ.gi];
   if(QZ.done){const pass=QZ.score>=9;return `<div class="theory" style="gap:10px"><span class="eyebrow">Testas · ${esc(g)}</span><div class="bpm" style="font-size:2.4rem">${QZ.score}/10</div>
     ${pass?'<b class="heard good">Išlaikyta! Tikslas pasiektas.</b>':'<span class="heard bad">Reikia bent 9 iš 10. Peržiūrėkite klaidas ir bandykite dar kartą.</span>'}
     ${QZ.wrong.length?`<h3>Klaidos</h3><ul class="tips">${QZ.wrong.map(w=>`<li>${esc(w.q)} Atsakėte <b>${esc(w.given)}</b>, teisingai <b>${esc(w.a)}</b>. ${esc(w.ex)}</li>`).join('')}</ul>`:''}
-    <div class="row"><button class="btn small primary" data-qz="${QZ.ph}:${QZ.gi}">Bandyti dar kartą</button><button class="btn small" id="qzClose">Grįžti į tikslus</button></div></div>`;}
+    <div class="row">${QZ.inline&&pass?'':`<button class="btn small primary" data-${QZ.inline?'qzi':'qz'}="${QZ.ph}:${QZ.gi}">Bandyti dar kartą</button>`}<button class="btn small" id="qzClose">${QZ.inline?'Uždaryti':'Grįžti į tikslus'}</button></div></div>`;}
   const q=QZ.qs[QZ.i];const A=QZ.ans;
   return `<div class="theory" style="gap:10px"><span class="eyebrow">Testas · ${QZ.i+1} iš ${QZ.qs.length} · ${esc(QT[q.topic].t)}</span><h3>${esc(q.q)}</h3>
    <div class="stack" style="gap:8px">${q.opts.map((o,k)=>`<button class="btn ${A!=null?(o===q.a?'okc':k===A?'warnc':''):''}" data-qa="${k}" ${A!=null?'disabled':''} style="text-align:left">${esc(o)}</button>`).join('')}</div>
    ${A!=null?`<span class="heard ${q.opts[A]===q.a?'good':'bad'}">${q.opts[A]===q.a?'Teisingai.':'Neteisingai. Teisinga: '+esc(q.a)+'.'} ${esc(q.ex)}</span><button class="btn primary" id="qzNext">${QZ.i+1<QZ.qs.length?'Toliau':'Rezultatas'}</button>`:''}
    <button class="btn small" id="qzClose" style="align-self:flex-start">Nutraukti</button></div>`;
 }
-function quizAnswer(k){if(QZ.ans!=null)return;QZ.ans=k;const q=QZ.qs[QZ.i];const ok=q.opts[k]===q.a;if(ok){QZ.score++;beep(true);}else{beep(false);QZ.wrong.push({topic:q.topic,q:q.q,a:q.a,given:q.opts[k],ex:q.ex});}renderGoals();}
-function quizNext(){QZ.i++;QZ.ans=null;if(QZ.i>=QZ.qs.length){QZ.done=true;if(!S.quizHist)S.quizHist=[];S.quizHist.push({d:todayStr(),ph:QZ.ph,gi:QZ.gi,score:QZ.score,n:QZ.qs.length,wrong:QZ.wrong.map(w=>({topic:w.topic,q:w.q,a:w.a,given:w.given}))});if(S.quizHist.length>200)S.quizHist.shift();save();if(QZ.score>=9)chime();}renderGoals();}
+function quizAnswer(k){if(QZ.ans!=null)return;QZ.ans=k;const q=QZ.qs[QZ.i];const ok=q.opts[k]===q.a;if(ok){QZ.score++;beep(true);}else{beep(false);QZ.wrong.push({topic:q.topic,q:q.q,a:q.a,given:q.opts[k],ex:q.ex});}qzRender();}
+function quizNext(){QZ.i++;QZ.ans=null;if(QZ.i>=QZ.qs.length){QZ.done=true;if(!S.quizHist)S.quizHist=[];S.quizHist.push({d:todayStr(),ph:QZ.ph,gi:QZ.gi,score:QZ.score,n:QZ.qs.length,wrong:QZ.wrong.map(w=>({topic:w.topic,q:w.q,a:w.a,given:w.given}))});if(S.quizHist.length>200)S.quizHist.shift();if(QZ.inline&&QZ.score>=9){const st=lsnSt();st.qd=todayStr();st.qgi=QZ.gi;markDone("lesson",true);}save();if(QZ.score>=9)chime();}qzRender();}
 
 /* ---------- natų sekos patikra mikrofonu (chromatinis, gama, pentatonika) ---------- */
 function seqBuild(id){
@@ -1959,7 +1960,8 @@ function goalsClick(t){
   if(t.dataset.qz){const [ph,gi]=t.dataset.qz.split(":").map(Number);startQuiz(ph,gi);return true;}
   if(t.dataset.qa!==undefined){quizAnswer(+t.dataset.qa);return true;}
   if(t.id==="qzNext"){quizNext();return true;}
-  if(t.id==="qzClose"){QZ.active=false;renderGoals();return true;}
+  if(t.id==="qzClose"){QZ.active=false;qzRender();return true;}
+  if(t.dataset.qzi){const [ph,gi]=t.dataset.qzi.split(":").map(Number);startQuiz(ph,gi,true);return true;}
   if(t.dataset.sqgo){if(SQ.active)return true;const id=t.dataset.sqgo,b=+t.dataset.sqbpm||60;if(!t.closest("[data-sqbox]")){GV.sq={id,bpm:b};renderGoals();show("goals");}startSeq(id,b);return true;}
   if(t.id==="sqStop"){sqStop();return true;}
   if(t.dataset.sumsc){const c=t.dataset.sumsc;GV.sc=true;if(document.getElementById("v-goals").hidden)show("goals");renderGoals();startSC(null,c);return true;}
@@ -1998,11 +2000,27 @@ PHASES[5].theory+=`<h3>Ritmas: šešioliktinės</h3><p>Šešioliktinės: 4 smūg
 const TRY={"1:Ritmas":"Akordų pratime braukite aštuntinėmis: žemyn ant skaičių, aukštyn ant „ir“, garsiai skaičiuodami 1 ir 2 ir.","2:Ritmas":"Ant G–C braukite Ž Ž A A Ž A ir skaičiuokite 1 2 ir (3) ir 4 ir. Ant 3 ranka juda, bet stygų neliečia.","12 natų":"Sugrokite 6 stygoje natas nuo 0 iki 12 skersinės ir garsiai sakykite jų vardus. Kur nėra diezo? Atkreipkite dėmesį: 12 skersinėje vėl E, kaip atviros stygos.","Gitaroje":"Raskite A natą 6 stygoje (5 sk.) ir 5 stygoje (atvira). Palyginkite: tai ta pati nata.","Ritmas":"Įjunkite metronomą 60 bpm ir 1 minutę braukite po vieną kartą ant kiekvieno tvaksnio, garsiai skaičiuodami.","Kaip įsiminti natas":"Šiandien natų pratime pirmiausia raskite orientyrus 3, 5, 7 ir 9 skersinėse. 12 skersinė kartoja atvirą stygą, jos mokytis nereikia.","Tabulatūra":"Sugrokite TAB pavyzdį iš šios pamokos. Kokia tai gama?","Gama yra formulė":"Pagal T T P T T T P sugrokite majoro gamą viena styga nuo bet kurios natos.","Laipsniai":"C majoro gamoje sugrokite tik 1, 3 ir 5 laipsnius. Ką girdite? Tai C akordas.","Pauzė":"Akordų pratime braukite ant 1, 2 ir 3, o ant 4 ranka praeina pro šalį neliesdama stygų.","Intervalai":"Nuo 6 st. 3 sk. (G) sugrokite didžiąją terciją (7 sk.) ir mažąją (6 sk.). Kuri šviesesnė?","Trigarsis = 1, 3, 5":"Paspauskite C akordą ir sugrokite stygas po vieną. Kurios natos yra C, E ir G?","Tonacijos akordai":"Sugrokite C, Dm, Em, F, G, Am vieną po kito: tai visi C tonacijos akordai.","Natūralusis minoras":"Sugrokite A minorą 5 stygoje nuo atviros stygos pagal T P T T P T T.","Minorinė pentatonika":"Šiandien pentatonikos pratime pradėkite ir baikite ant A natos. Ji yra „namai“.","Paralelinės tonacijos":"Sugrokite C–G–Am–F, tada Am–F–C–G. Tos pačios natos, kita nuotaika.","Kvintų ratas":"Raskite gitaroje kvintų ratą: C → G → D → A → E, kiekviena nata 5 stygoje kvinta aukščiau (2 skersinės aukščiau ir viena styga žemyn).","12 taktų bliuzas":"Grokite bliuzą ir garsiai skaičiuokite taktus nuo 1 iki 12.","Ritmas: shuffle":"Bliuzo pratime grokite „da-ba, da-ba“ ritmu. Įsivaizduokite žingsniuojantį žmogų.","Barė":"Paspauskite F barę ir sugrokite stygas po vieną. Kuri neskamba? Patraukite alkūnę arčiau kūno.","V → I trauka":"Sugrokite C–F–G ir sustokite ant G. Jaučiate, kaip norisi grįžti į C? Tada sugrokite G7 → C.","Septakordai":"Sugrokite C, tada Cmaj7, tada C7. Kaip keičiasi nuotaika?","Ritmas: sinkopė ir duslinimas":"Ant bet kurių akordų: Ž (1), čk (2), Ž A (3 ir), čk (4).","Transpozicija":"Užsirašykite šio etapo dainos akordus laipsniais (I, V, vi...).","Kapodastras":"Uždėkite kapodastrą (arba barę) ant 2 sk. ir grokite G formą. Kokia tai tonacija?","Klausa":"Paleiskite mėgstamą dainą ir pabandykite rasti boso natą 6 ar 5 stygoje.","Akordeonui":"Prisiminkite, ką žinote apie C tonaciją, ir įsivaizduokite tas natas klaviatūroje.","Ritmas: šešioliktinės":"Metronomas 50 bpm: šešioliktinėmis sausai braukite per prislopintas stygas, skaičiuodami „1 e ir a“."};
 function lessonsOf(i){const parts=PHASES[i].theory.split(/(?=<h3>)/).map(x=>x.trim()).filter(x=>x.startsWith("<h3>"));
   const tail=PHASES[i].theory.split(/(?=<h3>)/)[0];return parts.map(x=>{const t=(x.match(/<h3>(.*?)<\/h3>/)||[])[1]||"";return {t,html:x,tryIt:TRY[i+":"+t]||TRY[t]||""};});}
-function lessonIdx(){const L=lessonsOf(S.phase);return (practiceDay()-1)%L.length;}
-function lessonHtml(){const L=lessonsOf(S.phase);const i=lessonIdx();const l=L[i];
-  return `<span class="eyebrow">Pamoka ${i+1} iš ${L.length}${practiceDay()>L.length?' · kartojimas':''}</span><div class="theory" style="border:0;padding:0">${l.html}</div>${l.tryIt?`<div class="note"><b>Išbandykite ant gitaros:</b> ${esc(l.tryIt)}</div>`:''}<span class="muted" style="font-size:.85rem">Visa etapo teorija ir testai yra skiltyje „Teorija“.</span>`;}
+/* pamokos einama paeiliui: nauja pamoka atsiranda tik atlikus ankstesnę; po visų pamokų dienos užduotyje laikomas etapo testas, vėliau kartojama */
+function lsnSt(){if(!S.lsn)S.lsn={};if(!S.lsn[S.phase]){const t=todayStr();const k=practicedDays().filter(d=>d<t&&(!S.phaseStart||d>=S.phaseStart)).length;S.lsn[S.phase]={n:Math.min(k,lessonsOf(S.phase).length),d:null};}return S.lsn[S.phase];}
+function lsnMark(on){const L=lessonsOf(S.phase);const st=lsnSt();const t=todayStr();
+  if(on&&st.d!==t&&st.n<L.length){st.n++;st.d=t;}else if(!on&&st.d===t){st.n=Math.max(0,st.n-1);st.d=null;}}
+function lsnMode(){const L=lessonsOf(S.phase);const st=lsnSt();if(st.d===todayStr())return {k:"lesson",i:st.n-1};
+  if(QZ.active&&QZ.inline&&QZ.ph===S.phase)return {k:"quiz",gi:QZ.gi,left:1};
+  if(st.qd===todayStr())return {k:"quiz",gi:st.qgi,left:1,passed:true};
+  if(st.n<L.length)return {k:"lesson",i:st.n};
+  const qi=(GD[S.phase]||[]).map((g,i)=>g.k==="quiz"&&!goalState(S.phase,i).ok?i:-1).filter(i=>i>=0);
+  if(qi.length)return {k:"quiz",gi:qi[0],left:qi.length};
+  return {k:"repeat",i:(practiceDay()-1)%L.length};}
+function lessonIdx(){const m=lsnMode();return m.k==="quiz"?0:m.i;}
+function lessonTitle(){const m=lsnMode();if(m.k==="quiz")return "Etapo testas: "+QT[GD[S.phase][m.gi].t[0]].t;return (m.k==="repeat"?"Kartojimas: ":"Dienos teorija: ")+((lessonsOf(S.phase)[m.i]||{}).t||"");}
+function lessonHtml(){const L=lessonsOf(S.phase);const m=lsnMode();
+  if(m.k==="quiz"){if(QZ.active&&QZ.inline&&QZ.ph===S.phase)return quizHtml();
+    if(m.passed)return `<b class="heard good">Testas šiandien išlaikytas. Etapo teorijos tikslas įskaitytas.</b>`;
+    return `<span class="eyebrow">Visos ${L.length} etapo pamokos išeitos · testas${m.left>1?' 1 iš '+m.left:''}</span><p>10 klausimų iš šio etapo teorijos. Reikia bent 9 teisingų. Išlaikius testą, ši užduotis pažymima atlikta, o etapo tikslas įskaitomas.</p><button class="btn primary" data-qzi="${S.phase}:${m.gi}" style="align-self:flex-start">Pradėti testą</button>`;}
+  const i=m.i;const l=L[i];
+  return `<span class="eyebrow">Pamoka ${i+1} iš ${L.length}${m.k==="repeat"?' · kartojimas':''}</span><div class="theory" style="border:0;padding:0">${l.html}</div>${l.tryIt?`<div class="note"><b>Išbandykite ant gitaros:</b> ${esc(l.tryIt)}</div>`:''}<span class="muted" style="font-size:.85rem">${m.k==="lesson"?(i+1<L.length?"Pažymėjus atlikta, rytoj bus kita pamoka.":"Tai paskutinė etapo pamoka. Rytoj šioje vietoje bus etapo testas."):"Visos pamokos taip pat surinktos skiltyje „Teorija“, jei norite pasižiūrėti iš naujo."}</span>`;}
 PHASES.forEach((p,i)=>{
-  p.ex.unshift({id:"lesson",n:"Dienos teorija",m:2,lesson:true,h:"Viena trumpa pamoka ir užduotis ant gitaros. Kasdien vis kita etapo tema."});
+  p.ex.unshift({id:"lesson",n:"Dienos teorija",m:2,lesson:true,h:"Viena trumpa pamoka ir užduotis ant gitaros. Pamokos einamos paeiliui, po vieną per dieną. Išėjus visas, šioje vietoje bus etapo testas."});
   if(i>0){const w=p.ex.findIndex(e=>e.id==="warm");p.ex.splice(w+1,0,{id:"notesd",n:"Grifo natos",m:3,drill:true,h:"Kasdien 3 min natų: tęsiama nuo ten, kur baigėte. Po 3 gerų dienų programėlė pati pereina prie kitos stygos, kol išmoksite visas. Barė akordams 5 etape tai būtina."});}
   const S2=SONGS[i];if(S2){const k=p.ex.findIndex(e=>e.eartr);const mk=x=>({n:x.n,bpm:x.bpm,changes:[x.seq],h:x.h+" Žodžių ieškokite internete. Programėlė tikrina, ar braukimai laiku ir ar laiku pakeičiate akordą."});
     p.ex.splice(k<0?p.ex.length:k,0,Object.assign({id:"song",m:5,song:true,opts:[mk(S2)].concat(SONGS2[i]?[mk(SONGS2[i])]:[])},mk(S2)));}
@@ -2017,7 +2035,7 @@ PHASES.forEach((p,i)=>{
 
 function renderAll(){renderToday();renderGoals();renderTheory();renderMetro();if(!P.round)renderEar();renderEarTrain();renderCal();}
 function render(){renderAll();}
-const APP_V="2026-11-21h";
+const APP_V="2026-11-21i";
 async function checkUpdate(){try{const r=await fetch(location.pathname+"?chk="+Date.now(),{cache:"no-store"});const t=await r.text();const m=t.match(/const APP_V="([^"]+)"/);
   if(m&&m[1]!==APP_V&&!document.getElementById("updBar")){const d=document.createElement("div");d.id="updBar";d.className="note";d.style.cssText="position:fixed;left:12px;right:12px;top:12px;z-index:50;display:flex;gap:10px;align-items:center;justify-content:space-between";
     d.innerHTML='<span>Yra nauja programėlės versija.</span><button class="btn small primary" id="updGo">Atnaujinti</button>';document.body.appendChild(d);
