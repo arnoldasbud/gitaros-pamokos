@@ -541,7 +541,7 @@ function renderGoals(){if(accOn())return accGoals();
    <p><b>Tikslas pasiektas,</b> kai jį įvykdote 3 skirtingas dienas. Praleista diena rezultato nenubraukia.</p>
    <p><b>Kartą per savaitę</b> 10 min skirkite ankstesnio etapo pratimams.</p>
    <p class="muted">Šiomis taisyklėmis remiasi „Šiandienos rekomendacijos“ skiltyje „Šiandien“.</p></div></details>`;
-  h+=`<p class="muted" style="font-size:.75rem">Programėlės versija ${typeof APP_V!=="undefined"?APP_V:""}</p>`;
+  h+=`<div class="row" style="justify-content:flex-start;align-items:center"><span class="muted" style="font-size:.75rem">Programėlės versija ${typeof APP_V!=="undefined"?APP_V:""}</span><button class="btn small" data-updchk="1">Tikrinti atnaujinimus</button></div>`;
   if(S.phase>0)h+=`<button class="btn small" id="prev" style="align-self:flex-start">Grįžti į ${S.phase} etapą</button>`;
   v.innerHTML=h;
 }
@@ -2344,7 +2344,7 @@ function accGoals(){const v=document.getElementById("v-goals");const A=A_();cons
    <p><b>Tempas keičiasi pagal jus.</b> Atlikę pratimą su tempu, įvertinkite: „Lengva“ pakelia 5 bpm, „Sunku“ nuleidžia 5 bpm.</p>
    <p><b>Dumplių lygumas:</b> po 2 matavimų iš eilės nuo 8 balų judesys pailgėja (4 → 6 → 8 tvaksniai), po 2 iš eilės žemiau 5 sutrumpėja.</p>
    <p><b>Planas</b> sudarytas pagal pradedančiųjų kursų seką (Palmer-Hughes, Hal Leonard, Bažilino savamokslis): dumplės ir C pozicija, C–G7–F bosai, valsas, minorai, F tonacija, registrai ir tremolo.</p></div></details>`;
-  h+=`<p class="muted" style="font-size:.75rem">Programėlės versija ${typeof APP_V!=="undefined"?APP_V:""}</p>`;
+  h+=`<div class="row" style="justify-content:flex-start;align-items:center"><span class="muted" style="font-size:.75rem">Programėlės versija ${typeof APP_V!=="undefined"?APP_V:""}</span><button class="btn small" data-updchk="1">Tikrinti atnaujinimus</button></div>`;
   v.innerHTML=h;}
 function accTheory(){const v=document.getElementById("v-theory");const A=A_();const p=ACC[A.phase];
   let h=instSwitch()+`<div class="head"><span class="eyebrow">Akordeonas · ${A.phase+1} etapo teorija</span><h1>${esc(p.title)}</h1></div><article class="theory">${p.theory}</article>`;
@@ -2376,11 +2376,13 @@ document.getElementById("app").addEventListener("click",e=>{const g=e.target.clo
 
 function renderAll(){accNav();renderToday();renderGoals();renderTheory();renderMetro();if(!P.round)renderEar();renderEarTrain();renderCal();}
 function render(){renderAll();}
-const APP_V="2026-11-21j";
-async function checkUpdate(){try{const r=await fetch(location.pathname+"?chk="+Date.now(),{cache:"no-store"});const t=await r.text();const m=t.match(/const APP_V="([^"]+)"/);
+const APP_V="2026-11-21k";
+async function checkUpdate(manual){try{const r=await fetch(location.pathname+"?chk="+Date.now(),{cache:"no-store"});if(!r.ok)throw 0;const t=await r.text();const m=t.match(/const APP_V="([^"]+)"/);
+  if(manual){if(!m)throw 0;if(m[1]===APP_V){toast("Jau naujausia versija ("+APP_V+").");return;}toast("Rasta nauja versija "+m[1]+".");}
   if(m&&m[1]!==APP_V&&!document.getElementById("updBar")){const d=document.createElement("div");d.id="updBar";d.className="note";d.style.cssText="position:fixed;left:12px;right:12px;top:12px;z-index:50;display:flex;gap:10px;align-items:center;justify-content:space-between";
     d.innerHTML='<span>Yra nauja programėlės versija.</span><button class="btn small primary" id="updGo">Atnaujinti</button>';document.body.appendChild(d);
-    document.getElementById("updGo").onclick=()=>{flushRun();location.replace(location.pathname+"?v="+encodeURIComponent(m[1]));};}}catch(e){}}
+    document.getElementById("updGo").onclick=()=>{flushRun();location.replace(location.pathname+"?v="+encodeURIComponent(m[1]));};}}catch(e){if(manual)toast("Nepavyko patikrinti. Patikrinkite interneto ryšį.");}}
+document.addEventListener("click",e=>{const b=e.target.closest("[data-updchk]");if(b)checkUpdate(true);});
 renderAll();try{autoPhase();}catch(e){}
 setTimeout(checkUpdate,1500);document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")checkUpdate();});
 // refresh at midnight / when returning to the app
