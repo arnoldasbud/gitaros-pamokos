@@ -1020,13 +1020,16 @@ function judgeGeneric(ch,name){const t=CHORD_PCS[name];const h=[...new Set(t.map
 function chordFrame(){
   P.an.getFloatTimeDomainData(P.buf);let rms=0;for(let i=0;i<P.buf.length;i++)rms+=P.buf[i]*P.buf[i];rms=Math.sqrt(rms/P.buf.length);
   const now=performance.now();const fl=CH2.floor;fl.push(rms);if(fl.length>8)fl.shift();const floor=Math.min(...fl);
-  if(!CH2.pendingAt&&now-CH2.lastOn>280&&rms>Math.max(0.015,((S.cal&&S.cal.noise)||0)*3)&&rms>floor*2.5){CH2.lastOn=now;CH2.pendingAt=now+300;CH2.pk=rms;}
+  /* tas pats užgavimo aptikimas kaip akordų ritme: pastebi braukimą ir tada, kai ankstesnis akordas dar skamba */
+  const on=P.anOn?onScan(CH2,1.3,Math.max(0.01,((S.cal&&S.cal.noiseLow)||0)*3),0.28,!CH2.pendingAt):null;
+  if(!CH2.pendingAt&&now-CH2.lastOn>280&&(on!=null||rms>Math.max(0.015,((S.cal&&S.cal.noise)||0)*3)&&rms>floor*2.5)){CH2.lastOn=now;CH2.pendingAt=now+300;CH2.pk=rms;}
   if(CH2.pendingAt&&rms>CH2.pk)CH2.pk=rms;
-  if(CH2.pendingAt&&now>=CH2.pendingAt){CH2.pendingAt=0;CH2.peaks=CH2.peaks||[];if(isGhost(CH2.peaks,CH2.pk,0.3))return;CH2.peaks.push(CH2.pk);if(CH2.peaks.length>12)CH2.peaks.shift();const ch=chroma();if(ch)onStrum(ch);}
+  if(CH2.pendingAt&&now>=CH2.pendingAt){CH2.pendingAt=0;CH2.peaks=CH2.peaks||[];if(isGhost(CH2.peaks,CH2.pk,0.3))return;CH2.peaks.push(CH2.pk);if(CH2.peaks.length>12)CH2.peaks.shift();CH2.heardN=(CH2.heardN||0)+1;const ch=chroma();if(ch)onStrum(ch);else{CH2.hint="Girdžiu braukimą, bet akordo neatpažinau. Padėkite telefoną arčiau gitaros.";paintChg();}}
 }
 function onStrum(ch){
   const p=CH2.pair;const ja=judge(ch,p[0]),jb=judge(ch,p[1]);const idx=classify(ch,p[0],p[1]);const j=idx?jb:ja;
-  if(idx!==CH2.expect){paintChg();return;}
+  if(idx!==CH2.expect){CH2.hint=`Girdžiu ${p[idx]}. Dabar pakeiskite į ${p[CH2.expect]}.`;paintChg();return;}
+  CH2.hint=null;
   const th=j.th;const q=(j.pur>=th[0]&&!j.miss.length)?"clean":(j.pur>=th[2]?"mid":"bad");
   registerChange(q,j.miss,Math.round(j.pur*100));
 }
@@ -1037,13 +1040,14 @@ function registerChange(q,miss,pur){
   if(q!=="clean")beep(false);paintChg();
 }
 async function startChanges(ex){
-  if(CH2.active)return;Object.assign(CH2,{peaks:[],active:true,ex,pair:chgPair(ex),expect:1,cur:0,changes:0,clean:0,strums:[],t0:performance.now(),floor:[],lastOn:0,pendingAt:0,last:null,missing:{},result:null});
+  if(CH2.active)return;Object.assign(CH2,{peaks:[],heardN:0,hint:null,active:true,ex,pair:chgPair(ex),expect:1,cur:0,changes:0,clean:0,strums:[],t0:performance.now(),floor:[],lastOn:0,pendingAt:0,last:null,missing:{},result:null});
   const ok=await micOn();if(!CH2.active){if(ok)micOff();return;}
-  CH2.manual=!ok;if(ok){P.an2=AC.createAnalyser();P.an2.fftSize=8192;P.an2.smoothingTimeConstant=0;P.src.connect(P.an2);P.fbuf=new Float32Array(P.an2.frequencyBinCount);}
+  CH2.manual=!ok;if(ok){P.an2=AC.createAnalyser();P.an2.fftSize=8192;P.an2.smoothingTimeConstant=0;P.src.connect(P.an2);P.fbuf=new Float32Array(P.an2.frequencyBinCount);
+    const a=AC,lp1=a.createBiquadFilter(),lp2=a.createBiquadFilter();lp1.type=lp2.type="lowpass";lp1.frequency.value=lp2.frequency.value=900;P.src.connect(lp1);lp1.connect(lp2);onInit(a,lp2,CH2);}
   CH2.t0=performance.now();paintChg();
 }
 function endChanges(){
-  if(!CH2.active)return;CH2.active=false;micOff();P.an2=null;
+  if(!CH2.active)return;CH2.active=false;micOff();P.an2=null;P.anOn=null;
   const min=Math.max((performance.now()-CH2.t0)/60000,1/60);
   if(CH2.changes>0){const r={d:todayStr(),pair:CH2.pair.join("–"),changes:CH2.changes,clean:CH2.clean,perMin:min>=0.9?Math.round(CH2.changes/min):CH2.changes,cleanPerMin:min>=0.9?Math.round(CH2.clean/min):CH2.clean,miss:Object.entries(CH2.missing).sort((a,b)=>b[1]-a[1]).slice(0,3).map(x=>x[0])};
     if(!S.chHist)S.chHist=[];S.chHist.push(r);if(S.chHist.length>200)S.chHist.shift();CH2.result=r;save();}
@@ -1054,9 +1058,10 @@ function chgSpeedHtml(ex){
   if(CH2.active&&CH2.ex&&CH2.ex.id===ex.id){
     const next=CH2.pair[CH2.expect];const L=CH2.last;const min=Math.max((performance.now()-CH2.t0)/60000,1/60);
     const qt=L?(L.q==="clean"?'<span class="heard good">Švarus keitimas</span>':L.q==="mid"?'<span class="heard" style="color:var(--brass)">Neaiškiai'+(L.miss.length?': silpna '+L.miss.join(", "):'')+'</span>':'<span class="heard bad">Nešvariai'+(L.miss.length?': trūksta '+L.miss.join(", "):'')+'</span>'):'<span class="heard">'+(CH2.manual?'Įvertinkite kiekvieną keitimą patys':'Pradėkite nuo '+CH2.pair[0]+' ir pereikite į '+CH2.pair[1])+'</span>';
+    const qh=CH2.hint&&!CH2.manual?`<span class="heard">${esc(CH2.hint)}</span>`:qt;
     return `<span class="eyebrow">Dabar grokite</span><div class="target">${next}</div>
      <div class="stats" style="width:100%"><div class="stat"><b>${CH2.changes}</b><small>keitimų</small></div><div class="stat"><b>${CH2.clean}</b><small>švarių</small></div><div class="stat"><b>${CH2.changes>3?Math.round(CH2.changes/min):"–"}</b><small>per minutę</small></div></div>
-     ${qt}${CH2.manual?'<div class="row"><button class="btn small primary" data-chm="clean">Švarus</button><button class="btn small" data-chm="bad">Nešvarus</button></div>':'<button class="btn small" data-chm="bad">Pažymėti nešvariu (klausa)</button>'}`;
+     ${qh}${CH2.manual?'':`<span class="muted" style="font-size:.82rem">Išgirsta braukimų: ${CH2.heardN||0}</span>`}${CH2.manual?'<div class="row"><button class="btn small primary" data-chm="clean">Švarus</button><button class="btn small" data-chm="bad">Nešvarus</button></div>':'<button class="btn small" data-chm="bad">Pažymėti nešvariu (klausa)</button>'}`;
   }
   const pairs=ex.changes.map((p,i)=>`<button class="btn small" data-chp="${i}" data-chx="${ex.id}" ${tog(chgPair(ex)===p)}>${p.join(" ↔ ")}</button>`).join('');
   const st=Object.keys(STRICT).map(k=>`<button class="btn small" data-chs="${k}" ${tog(c.strict===k)}>${STRICT_T[k]}</button>`).join('');
@@ -1865,7 +1870,7 @@ PHASES.forEach(p=>p.ex.forEach(e=>{if(e.id==='chrom')e.seq='chrom';if(e.id==='sc
 
 function renderAll(){renderToday();renderGoals();renderTheory();renderMetro();if(!P.round)renderEar();renderEarTrain();renderCal();}
 function render(){renderAll();}
-const APP_V="2026-11-21a";
+const APP_V="2026-11-21b";
 async function checkUpdate(){try{const r=await fetch(location.pathname+"?chk="+Date.now(),{cache:"no-store"});const t=await r.text();const m=t.match(/const APP_V="([^"]+)"/);
   if(m&&m[1]!==APP_V&&!document.getElementById("updBar")){const d=document.createElement("div");d.id="updBar";d.className="note";d.style.cssText="position:fixed;left:12px;right:12px;top:12px;z-index:50;display:flex;gap:10px;align-items:center;justify-content:space-between";
     d.innerHTML='<span>Yra nauja programėlės versija.</span><button class="btn small primary" id="updGo">Atnaujinti</button>';document.body.appendChild(d);
