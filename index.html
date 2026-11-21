@@ -1921,14 +1921,17 @@ const SONGS=[null,
  {n:"Daina: Hallelujah (Leonard Cohen)",bpm:60,seq:["C","Am","C","Am","F","G","C","G"],h:"Posmas C dur: C – Am – C – Am – F – G – C – G. Originalas yra 6/8, bet pradėkite po 4 smūgius taktui. Paskui transponuokite į G (G – Em – G – Em – C – D – G – D)."}];
 PHASES.forEach((p,i)=>{
   if(i>0){const w=p.ex.findIndex(e=>e.id==="warm");p.ex.splice(w+1,0,{id:"notesd",n:"Grifo natos",m:3,drill:true,h:"Kasdien 3 min natų: tęsiama nuo ten, kur baigėte. Po 3 gerų dienų programėlė pati pereina prie kitos stygos, kol išmoksite visas. Barė akordams 5 etape tai būtina."});}
-  const S2=SONGS[i];if(S2){const k=p.ex.findIndex(e=>e.eartr);p.ex.splice(k<0?p.ex.length:k,0,{id:"song",n:S2.n,m:6,bpm:S2.bpm,song:true,changes:[S2.seq],h:S2.h+" Žodžių ieškokite internete. Programėlė tikrina, ar braukimai laiku ir ar laiku pakeičiate akordą."});}
-  if(i>0)p.ex.push({id:"rev",n:"Kartojimas: silpnos vietos",m:4,review:true,h:"Programėlė parenka vietas, kuriose dažniausiai klystate. Jei klaidų nėra, pakartokite ankstesnio etapo pratimą."});
+  const S2=SONGS[i];if(S2){const k=p.ex.findIndex(e=>e.eartr);p.ex.splice(k<0?p.ex.length:k,0,{id:"song",n:S2.n,m:5,bpm:S2.bpm,song:true,changes:[S2.seq],h:S2.h+" Žodžių ieškokite internete. Programėlė tikrina, ar braukimai laiku ir ar laiku pakeičiate akordą."});}
+  /* kad pilna diena tilptų į ~30 min, kai kurie pratimai sutrumpinti */
+  const MIN=[null,{scale1:2,scaleopen:3,cgd:4,prog1:3,eartr:3},{intv:3,chordnotes:2,pop:4,eartr:3},{penta:4,blues:4,impro:4,review:2,eartr:3},{fbarre:4,move:3,sev:3,eartr:3},{ear:5,scale2:3,rhythm:3,eartr:3}][i];
+  if(MIN)p.ex.forEach(e=>{if(MIN[e.id])e.m=MIN[e.id];});
+  if(i>0)p.ex.push({id:"rev",n:"Kartojimas: silpnos vietos",m:3,review:true,h:"Programėlė parenka vietas, kuriose dažniausiai klystate. Jei klaidų nėra, pakartokite ankstesnio etapo pratimą."});
 });
 
 
 function renderAll(){renderToday();renderGoals();renderTheory();renderMetro();if(!P.round)renderEar();renderEarTrain();renderCal();}
 function render(){renderAll();}
-const APP_V="2026-11-21e";
+const APP_V="2026-11-21f";
 async function checkUpdate(){try{const r=await fetch(location.pathname+"?chk="+Date.now(),{cache:"no-store"});const t=await r.text();const m=t.match(/const APP_V="([^"]+)"/);
   if(m&&m[1]!==APP_V&&!document.getElementById("updBar")){const d=document.createElement("div");d.id="updBar";d.className="note";d.style.cssText="position:fixed;left:12px;right:12px;top:12px;z-index:50;display:flex;gap:10px;align-items:center;justify-content:space-between";
     d.innerHTML='<span>Yra nauja programėlės versija.</span><button class="btn small primary" id="updGo">Atnaujinti</button>';document.body.appendChild(d);
