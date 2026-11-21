@@ -359,11 +359,11 @@ function save(){
   }catch(e){}
 })();
 
-function doneToday(){const t=todayStr();return (S.done[t]||[]);}
-function secsToday(){return S.log[todayStr()]||0;}
-function addSecs(s){if(s<=0)return;const t=todayStr();S.log[t]=(S.log[t]||0)+Math.round(s);}
-function markDone(id,on){const t=todayStr();if(id==="lesson")lsnMark(on);const a=new Set(S.done[t]||[]);on?a.add(id):a.delete(id);S.done[t]=[...a];}
-function streak(){let n=0;const d=new Date();if(!(S.log[todayStr(d)]>=60))d.setDate(d.getDate()-1);while(S.log[todayStr(d)]>=60){n++;d.setDate(d.getDate()-1);}return n;}
+function doneToday(){const t=todayStr();return (ST().done[t]||[]);}
+function secsToday(){return ST().log[todayStr()]||0;}
+function addSecs(s){if(s<=0)return;const t=todayStr();const L=ST().log;L[t]=(L[t]||0)+Math.round(s);}
+function markDone(id,on){const t=todayStr();if(id==="lesson"&&!accOn())lsnMark(on);const D=ST().done;const a=new Set(D[t]||[]);on?a.add(id):a.delete(id);D[t]=[...a];}
+function streak(){const L=ST().log;let n=0;const d=new Date();if(!(L[todayStr(d)]>=60))d.setDate(d.getDate()-1);while(L[todayStr(d)]>=60){n++;d.setDate(d.getDate()-1);}return n;}
 function phaseGoals(){return PHASES[S.phase].goals.map((_,i)=>goalState(S.phase,i).ok);}
 
 /* ---------- audio ---------- */
@@ -402,7 +402,7 @@ function week2(){return practiceDay()>7;}
 function songIdx(){return ((S.songPick||{})[S.phase])||0;}
 function liveEx(e){if(e.song&&e.opts){const o=e.opts[Math.min(songIdx(),e.opts.length-1)];return Object.assign({},e,o);}
   if(e.alt&&week2())return Object.assign({},e,e.alt,{wk2:true});return e;}
-function curEx(){const all=PHASES[S.phase].ex.map(liveEx).map(e=>e.lesson&&lsnMode().k==="quiz"?Object.assign({},e,{m:3,h:"Etapo pamokos išeitos, todėl šiandien trumpas testas. Taip patikrinsite, ar viskas įsiminta."}):e);return S.shortDay===todayStr()?shortPlan(all):all;}
+function curEx(){if(accOn())return accCurEx();const all=PHASES[S.phase].ex.map(liveEx).map(e=>e.lesson&&lsnMode().k==="quiz"?Object.assign({},e,{m:3,h:"Etapo pamokos išeitos, todėl šiandien trumpas testas. Taip patikrinsite, ar viskas įsiminta."}):e);return S.shortDay===todayStr()?shortPlan(all):all;}
 /* trumpa diena (~10 min): apšilimas 1 min ir svarbiausi pratimai po 3 min */
 function shortPlan(all){const pick=[];const add=e=>{if(e&&!pick.includes(e))pick.push(e);};
   add(all.find(e=>e.id==="warm"));add(all.find(e=>e.song));add(all.find(e=>e.changes&&!e.song));add(all.find(e=>e.seq));add(all.find(e=>e.drill));
@@ -474,16 +474,16 @@ function weekHtml(){const t=todayStr();const in7=d=>d&&daysBetween(d,t)<7;
   const rc=(REC.list||[]).filter(r=>in7(r.d)).length;if(rc)out.push(`įrašų: ${rc}`);
   let best=0,cur=0;Object.keys(S.log||{}).filter(d=>S.log[d]>=60).sort().forEach((d,i,a)=>{cur=i&&daysBetween(a[i-1],d)===1?cur+1:1;best=Math.max(best,cur);});
   return `<div class="note" style="display:flex;flex-direction:column;gap:4px"><b>Ši savaitė: ${days} d. iš 7, ${mins} min</b><span style="font-size:.9rem">${out.length?"Pagerėjo: "+out.join(", ")+".":"Pagerėjimai atsiras čia, kai programėlė pakels lygį ar tempą."} Ilgiausia serija: ${best} d.</span>${S.phase>0&&!recThisWeek()?'<span style="font-size:.9rem">Šią savaitę dar neįrašėte dainos (pratime „Daina“).</span>':''}</div>`;}
-function statsHtml(){
+function statsHtml(){if(accOn())return accStatsHtml();
   const plan=curEx().reduce((a,e)=>a+e.m,0);const g=phaseGoals().filter(Boolean).length;
   return `<div class="stats" id="stats"><div class="stat"><b>${Math.floor(secsToday()/60)}/${plan}</b><small>min šiandien</small></div><div class="stat"><b>${streak()}</b><small>dienų iš eilės</small></div><div class="stat"><b>${g}/${PHASES[S.phase].goals.length}</b><small>tikslų pasiekta</small></div></div>`;
 }
 function paintStats(){const el=document.getElementById("stats");if(el)el.outerHTML=statsHtml();}
 
-function renderToday(){
+function renderToday(){if(accOn())return accToday();
   const v=document.getElementById("v-today");const dn=doneToday();const open=v.querySelector("details.ex[open]");const openId=open?open.dataset.id:null;
   const sd=S.shortDay===todayStr();
-  let h=stageHeader()+`<button class="btn small" id="calOpen" style="align-self:flex-start">${calReady()?"Gitaros pritaikymas ✓":"Pritaikyti programėlę savo gitarai"}</button>`+fretStrip()+statsHtml()+weekHtml()+recsHtml()+`<h2 style="margin-top:8px">Šiandienos pratimai${sd?' · trumpa diena':''}</h2><div class="row" style="justify-content:flex-start"><button class="btn small" id="shortDay" ${tog(sd)}>${sd?'Grįžti į visą programą':'Turiu tik 10 min: trumpa diena'}</button></div>${sd?'<span class="muted" style="font-size:.88rem">Apšilimas ir svarbiausi pratimai po 3 min. Rytoj vėl bus visa programa.</span>':''}`;
+  let h=instSwitch()+stageHeader()+`<button class="btn small" id="calOpen" style="align-self:flex-start">${calReady()?"Gitaros pritaikymas ✓":"Pritaikyti programėlę savo gitarai"}</button>`+fretStrip()+statsHtml()+weekHtml()+recsHtml()+`<h2 style="margin-top:8px">Šiandienos pratimai${sd?' · trumpa diena':''}</h2><div class="row" style="justify-content:flex-start"><button class="btn small" id="shortDay" ${tog(sd)}>${sd?'Grįžti į visą programą':'Turiu tik 10 min: trumpa diena'}</button></div>${sd?'<span class="muted" style="font-size:.88rem">Apšilimas ir svarbiausi pratimai po 3 min. Rytoj vėl bus visa programa.</span>':''}`;
   curEx().forEach(ex=>{
     const d=dn.includes(ex.id);
     h+=`<details class="ex ${d?'done':''}" data-id="${ex.id}" ${openId===ex.id?'open':''}>
@@ -512,7 +512,7 @@ function renderToday(){
 }
 
 let confirmNext=false;
-function renderGoals(){
+function renderGoals(){if(accOn())return accGoals();
   const v=document.getElementById("v-goals");const p=PHASES[S.phase];const g=phaseGoals();const day=practiceDay();
   const all=p.goals.every((_,i)=>g[i]);const last=S.phase===PHASES.length-1;
   let h=`<div class="head"><span class="eyebrow">${S.phase+1} etapo tikslai</span><h1>Ką turiu mokėti</h1><p class="muted">Tikslai vertinami pagal jūsų rezultatus. Praktinis tikslas įskaitomas, kai jį įvykdote 3 skirtingas dienas, teorijos tikslas, kai teste atsakote bent 9 iš 10. Kai pasieksite visus, programėlė pati pereis į kitą etapą. Į ankstesnį etapą galite grįžti skiltyje „Visas kelias“.</p></div>`;
@@ -552,15 +552,15 @@ function phasePreview(i){const ph=PHASES[i];
   const act=i<S.phase?`<button class="btn small" data-gophase="${i}">Grįžti į šį etapą</button>`:i>S.phase?`<span class="muted" style="font-size:.85rem">${i===S.phase+1?'Atsivers automatiškai, kai pasieksite visus dabartinio etapo tikslus.':'Atsivers po ankstesnių etapų.'}</span>`:'';
   return `<div class="stack" style="gap:6px;padding-top:6px"><span class="eyebrow">Pratimai (kasdien)</span><ul class="tips">${ex}</ul><span class="eyebrow">Tikslai</span><ul class="tips">${g}</ul>${act}</div>`;}
 /* automatinis perėjimas į kitą etapą, kai visi tikslai pasiekti. Grįžus į ankstesnį etapą, automatiškai nebeperjungiama, kol nepasieksite toliausiai pasiekto etapo. */
-function busy(){return T.running||RM.active||SQ.active||CH2.active||!!E.sess||!!(P.round)||QZ.active;}
-function autoPhase(){
+function busy(){return AK.active||T.running||RM.active||SQ.active||CH2.active||!!E.sess||!!(P.round)||QZ.active;}
+function autoPhase(){if(accOn())return accAuto();
   if(S.phase>=PHASES.length-1||busy())return;S.maxPhase=Math.max(S.maxPhase||0,S.phase);if(S.phase<S.maxPhase)return;
   if(!phaseGoals().every(Boolean))return;
   const n=S.phase+1;S.phaseAuto={to:n,d:todayStr()};goPhase(n);lvlToast(`Visi tikslai pasiekti! Automatiškai pereita į ${n+1} etapą: ${PHASES[n].title}`);
 }
 function goPhase(n){S.maxPhase=Math.max(S.maxPhase||0,S.phase,n);S.phase=n;S.phaseStart=todayStr();confirmNext=false;if(T.running)pauseT();T.id=null;save();renderAll();toast((n+1)+" etapas: "+PHASES[n].title);}
 
-function renderTheory(){
+function renderTheory(){if(accOn())return accTheory();
   const v=document.getElementById("v-theory");const p=PHASES[S.phase];
   let h=`<div class="head"><span class="eyebrow">${S.phase+1} etapo teorija</span><h1>${esc(p.title)}</h1><p class="muted">Tai žinynas. Pamokos ir testai kasdien pateikiami dienos užduotyse paeiliui, čia galite jas peržiūrėti visas iš karto.</p></div><article class="theory">${p.theory}</article>`;
   if(S.phase>0){h+='<h2 style="margin-top:8px">Ankstesni etapai</h2>';for(let i=S.phase-1;i>=0;i--){h+=`<details class="other"><summary>${i+1}. ${esc(PHASES[i].title)}</summary><div class="theory" style="border:0;padding:12px 0 0">${PHASES[i].theory}</div></details>`;}}
@@ -609,12 +609,12 @@ function stopM(){M.running=false;M.byTimer=false;clearInterval(M.iv);vizStop(M);
 
 /* ---------- wiring ---------- */
 /* išjungia visus mikrofono režimus ir su jais susijusį laikmatį, kad naujas režimas gautų mikrofoną */
-function releaseMic(){
+function releaseMic(){if(AK.active){AK.round=null;akStop();}
   if(T.running&&((P.round&&P.round.inline)||CH2.active||RM.active||SQ.active))pauseT();
   if(CH2.active)endChanges();if(RM.active)endRhythm();if(SQ.active)endSeq();if(SC.active){SC.active=false;SC.done=false;}
   if(P.round)stopRound();else if(P.on)micOff();
 }
-function show(v){document.querySelectorAll("nav.tabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.v===v));if(v!=="ear2"&&E.sess)endSess();if(SQ.active&&v!=="today"&&v!=="goals")sqStop();if(v!=="today"&&v!=="goals"&&SC.active){SC.active=false;micOff();}if(v==="today")setTimeout(renderToday,0);if(v==="goals")setTimeout(renderGoals,0);if(v!=="cal"&&CAL.active)calStop();["today","goals","theory","metro","ear","ear2","cal"].forEach(k=>document.getElementById("v-"+k).hidden=k!==v);const keep=(SQ.active||(SC.active&&!SC.ex))?(v==="today"||v==="goals"):(CH2.active||RM.active||SC.active)?v==="today":P.round?(P.round.inline?v==="today":v==="ear"):(v==="ear2"&&E.mode==="match");if((P.on||P.round||CH2.active||RM.active||SQ.active)&&!keep)releaseMic();window.scrollTo(0,0);}
+function show(v){document.querySelectorAll("nav.tabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.v===v));if(v!=="ear2"&&E.sess)endSess();if(SQ.active&&v!=="today"&&v!=="goals")sqStop();if(v!=="today"&&v!=="goals"&&SC.active){SC.active=false;micOff();}if(v==="today")setTimeout(renderToday,0);if(v==="goals")setTimeout(renderGoals,0);if(v!=="cal"&&CAL.active)calStop();["today","goals","theory","metro","ear","ear2","cal"].forEach(k=>document.getElementById("v-"+k).hidden=k!==v);const keep=AK.active?v===AK.view:(SQ.active||(SC.active&&!SC.ex))?(v==="today"||v==="goals"):(CH2.active||RM.active||SC.active)?v==="today":P.round?(P.round.inline?v==="today":v==="ear"):(v==="ear2"&&E.mode==="match");if((P.on||P.round||AK.active||CH2.active||RM.active||SQ.active)&&!keep)releaseMic();window.scrollTo(0,0);}
 document.querySelector("nav.tabs").addEventListener("click",e=>{const b=e.target.closest("button");if(b)show(b.dataset.v);});
 document.getElementById("app").addEventListener("click",e=>{
   const t=e.target.closest("button");if(!t)return;
@@ -638,6 +638,7 @@ document.getElementById("app").addEventListener("click",e=>{
   else if(t.dataset.ear){renderEar();show("ear");}
   else if(t.dataset.earsess){releaseMic();if(E.sess)endSess();E.mode=t.dataset.earsess;E.q=null;E.last=null;E.fromToday=t.dataset.exid;show("ear2");startSess(false);}
   else if(t.dataset.eartr){releaseMic();if(!E.sess){E.mode=t.dataset.eartr;E.q=null;E.last=null;}renderEarTrain();show("ear2");}
+  else if(accClick(t)){}
   else if(goalsClick(t)){}
   else if(calClick(t)){}
   else if(t.dataset.gotab){renderEar();show(t.dataset.gotab);}
@@ -744,7 +745,7 @@ function stopRound(){if(P.round&&P.round.items.length>0){endRound();}else{P.roun
 
 let frameFlip=false;
 function loop(){
-  if(!P.on)return;P.raf=requestAnimationFrame(loop);if(CAL.active){calFrame();return;}if(RM.active){if(P.anLow)rhythmFrame();return;}if(SQ.active){sqFrame();return;}if(CH2.active){chordFrame();return;}frameFlip=!frameFlip;if(frameFlip)return;
+  if(!P.on)return;P.raf=requestAnimationFrame(loop);if(CAL.active){calFrame();return;}if(AK.active){akFrame();return;}if(RM.active){if(P.anLow)rhythmFrame();return;}if(SQ.active){sqFrame();return;}if(CH2.active){chordFrame();return;}frameFlip=!frameFlip;if(frameFlip)return;
   P.an.getFloatTimeDomainData(P.buf);const f=performance.now()<(P.muteUntil||0)?-1:detectPitch(P.buf,AC.sampleRate);
   {let r=0;const b=P.buf;for(let i=0;i<b.length;i+=2)r+=b[i]*b[i];r=Math.sqrt(2*r/b.length);P.rfl=P.rfl||[];const fl=P.rfl.length?Math.min(...P.rfl):r;P.rfl.push(r);if(P.rfl.length>6)P.rfl.shift();
    // naujas užgavimas: garsas staiga išauga virš ankstesnio lygio
@@ -1674,7 +1675,7 @@ function fgClick(t){
   return false;
 }
 
-function renderEar(){const v=document.getElementById("v-ear");if(P.round&&!P.round.inline){renderEarMic();return;}
+function renderEar(){if(accOn())return accEar();const v=document.getElementById("v-ear");if(P.round&&!P.round.inline){renderEarMic();return;}
   if(S.grMode==="game")renderFG(v);else renderEarMic();
   if(!FG.active)v.insertAdjacentHTML("afterbegin",`<div class="row" style="justify-content:flex-start"><button class="btn small" data-grmode="mic" ${tog(S.grMode!=="game")}>Su gitara (mikrofonas)</button><button class="btn small" data-grmode="game" ${tog(S.grMode==="game")}>Žaidimas ekrane</button></div>`);}
 
@@ -2033,9 +2034,349 @@ PHASES.forEach((p,i)=>{
 });
 
 
-function renderAll(){renderToday();renderGoals();renderTheory();renderMetro();if(!P.round)renderEar();renderEarTrain();renderCal();}
+/* ---------- akordeonas ---------- */
+/* Atskiras instrumentas toje pačioje programėlėje: savo etapai, dienos, pažanga ir tikslai (S.acc).
+   Bendra su gitara: laikmatis, metronomas, mikrofonas, klausos treniruoklis ir teorija. */
+function accOn(){return S.inst==="acc";}
+function accS(){if(!S.acc)S.acc={phase:0,phaseStart:todayStr(),done:{},log:{},gdays:{},bpmAdj:{},rated:{},belLv:0,belHist:[],knHist:[],song:{}};return S.acc;}
+function ST(){return accOn()?accS():S;}
+/* Stradella bosai: stulpeliai pagal kvintų ratą, C viduryje. Eilės nuo dumplių: tercinis bosas, pagrindinis bosas, mažorinis, minorinis, septakordas, sumažintas */
+const FIFTHS20=["B𝄫","F♭","C♭","G♭","D♭","A♭","E♭","B♭","F","C","G","D","A","E","B","F#","C#","G#","D#","A#"];
+const BROWS={T:"Tercinis bosas",B:"Pagrindinis bosas",M:"Mažorinis",m:"Minorinis","7":"Septakordas",d:"Sumažintas"};
+const BASS_PRESETS={
+ "8":{c:4,r:"BM",t:"8 bosų"},"12":{c:6,r:"BM",t:"12 bosų"},"24":{c:8,r:"BMm",t:"24 bosai"},"32":{c:8,r:"BMm7",t:"32 bosai"},
+ "40":{c:8,r:"TBMm7",t:"40 bosų"},"48":{c:8,r:"TBMm7d",t:"48 bosai (8 × 6)"},"48b":{c:12,r:"TBMm",t:"48 bosai (12 × 4)"},
+ "60":{c:12,r:"TBMm7",t:"60 bosų"},"72":{c:12,r:"TBMm7d",t:"72 bosai"},"80":{c:16,r:"TBMm7",t:"80 bosų"},
+ "96":{c:16,r:"TBMm7d",t:"96 bosai"},"120":{c:20,r:"TBMm7d",t:"120 bosų"}};
+function bassKey(){return accS().bass||"120";}
+function bassCfg(){const p=BASS_PRESETS[bassKey()]||BASS_PRESETS["120"];const f=p.c/2-1;return {cols:FIFTHS20.slice(9-f,9-f+p.c),rows:p.r.split(""),t:p.t};}
+/* natų pavadinimai → pustonių klasė */
+const PCN={"C":0,"C#":1,"D♭":1,"D":2,"D#":3,"E♭":3,"E":4,"F♭":4,"F":5,"F#":6,"G♭":6,"G":7,"G#":8,"A♭":8,"A":9,"A#":10,"B♭":10,"B𝄫":9,"B":11,"C♭":11,"Bb":10};
+const PCNAME=["C","C#","D","E♭","E","F","F#","G","G#","A","B♭","B"];
+function accPc(n){return PCN[n];}
+/* ką skamba sagutė: moderniuose akordeonuose 7 ir sumažintas be kvintos */
+const BIV={T:[4],B:[0],M:[0,4,7],m:[0,3,7],"7":[0,4,10],d:[0,3,9]};
+const BSUF={T:"",B:"",M:"",m:"m","7":"7",d:"dim"};
+function bassBtnNotes(col,row){const r=accPc(col);return BIV[row].map(i=>PCNAME[(r+i)%12]);}
+function bassName(col,row){return row==="T"?PCNAME[(accPc(col)+4)%12]+" (tercinis)":row==="B"?col+" bosas":col+BSUF[row];}
+/* bosų schema: hl = ["C:B","G:7"] */
+function bassSvg(hl,opts){opts=opts||{};const c=bassCfg();const H=new Set(hl||[]);
+  const need=(hl||[]).filter(k=>{const [col,row]=k.split(":");return !c.cols.includes(col)||!c.rows.includes(row);});
+  // rodome tik stulpelius aplink pažymėtus, kad telefone būtų matyti (visa schema – skiltyje „Bosai“)
+  let cols=c.cols;if(!opts.full&&hl&&hl.length){const idx=hl.map(k=>c.cols.indexOf(k.split(":")[0])).filter(i=>i>=0);if(idx.length){const lo=Math.max(0,Math.min(...idx)-1),hi=Math.min(c.cols.length-1,Math.max(...idx)+1);cols=c.cols.slice(lo,hi+1);}}
+  const R=c.rows,bw=34,gap=6,lab=opts.full?0:0;const W=R.length*(bw+gap)+60,Hh=cols.length*(bw+gap)+28;
+  let s=`<svg viewBox="0 0 ${W} ${Hh}" width="100%" style="max-width:${Math.min(420,W*1.25)}px" role="img" aria-label="Bosų schema">`;
+  R.forEach((r,j)=>{s+=`<text x="${60+j*(bw+gap)+bw/2}" y="14" text-anchor="middle" font-size="10" fill="var(--muted)">${r==="T"?"Terc.":r==="B"?"Bosas":r==="M"?"Maj":r==="m"?"Min":r==="7"?"7":"Dim"}</text>`;});
+  cols.forEach((col,i)=>{const y=22+i*(bw+gap);s+=`<text x="50" y="${y+bw/2+4}" text-anchor="end" font-size="12" font-weight="700" fill="var(--fg)">${col}</text>`;
+    R.forEach((r,j)=>{const x=60+j*(bw+gap);const k=col+":"+r;const on=H.has(k);const mark=r==="B"&&(col==="C"||((col==="A♭"||col==="E")&&c.cols.length>=12));
+      s+=`<g data-akb="${k}" style="cursor:pointer"><circle cx="${x+bw/2}" cy="${y+bw/2}" r="${bw/2-1}" fill="${on?'var(--brass)':'var(--surface)'}" stroke="${on?'var(--brass)':'var(--line)'}" stroke-width="1.5"/>`;
+      if(mark)s+=`<circle cx="${x+bw/2}" cy="${y+bw/2}" r="4" fill="none" stroke="${on?'var(--surface)':'var(--muted)'}" stroke-width="1.5"/>`;
+      if(on)s+=`<text x="${x+bw/2}" y="${y+bw/2+4}" text-anchor="middle" font-size="10" font-weight="700" fill="var(--surface)">${mark?'':(r==="B"?col:r==="T"?"T":BSUF[r]||"M")}</text>`;
+      s+=`</g>`;});});
+  s+=`</svg>`;
+  return `<div class="stack" style="gap:4px;align-items:center;width:100%">${s}<span class="muted" style="font-size:.8rem">Eilės iš kairės nuo dumplių. Sagutė su įdubimu ar žiedu yra C bosas. Kryptis: aukštyn ♭, žemyn #.</span><span class="muted ak-bassinfo" style="font-size:.85rem;min-height:1.2em"></span>${need.length?`<span class="heard bad" style="font-size:.85rem">Jūsų akordeone (${esc(c.t)}) nėra: ${need.map(k=>{const [a,b]=k.split(":");return esc(bassName(a,b));}).join(", ")}. Praleiskite šią dalį arba pakeiskite bosų skaičių nustatymuose.</span>`:''}</div>`;}
+/* klaviatūra: 2 oktavos nuo C, pažymėtos natos ir pirštuotė */
+function kbSvg(notes,fing,opts){opts=opts||{};const wn=["C","D","E","F","G","A","B"];const oct=opts.oct||2;const W=wn.length*oct+1;const ww=24,wh=86,bh=54;
+  const N=(notes||[]).map(n=>typeof n==="number"?n:accPc(n));
+  // pažymime natų seką kylančia tvarka: kiekviena kita nata aukščiau už ankstesnę
+  const abs=[];let base=0;N.forEach((pc,i)=>{let a=pc+base;if(i>0)while(a<=abs[i-1])a+=12;if(i===0)a=pc;abs.push(a);});
+  const at={};abs.forEach((a,i)=>{at[a]=fing&&fing[i]!=null?fing[i]:"•";});
+  let s=`<svg viewBox="0 0 ${W*ww+2} ${wh+2}" width="100%" style="max-width:${W*ww*1.4}px" role="img" aria-label="Klaviatūra">`;
+  for(let i=0;i<W;i++){const pc=[0,2,4,5,7,9,11][i%7]+12*Math.floor(i/7);const on=at[pc]!=null;
+    s+=`<rect x="${1+i*ww}" y="1" width="${ww}" height="${wh}" rx="3" fill="${on?'var(--brass-soft)':'var(--surface)'}" stroke="var(--line)"/>`;
+    s+=`<text x="${1+i*ww+ww/2}" y="${wh-6}" text-anchor="middle" font-size="10" fill="var(--muted)">${wn[i%7]}</text>`;
+    if(on)s+=`<circle cx="${1+i*ww+ww/2}" cy="${wh-26}" r="9" fill="var(--brass)"/><text x="${1+i*ww+ww/2}" y="${wh-22}" text-anchor="middle" font-size="11" font-weight="700" fill="var(--surface)">${at[pc]}</text>`;}
+  for(let i=0;i<W-1;i++){const k=i%7;if(k===2||k===6)continue;const pc=[0,2,4,5,7,9,11][k]+1+12*Math.floor(i/7);const on=at[pc]!=null;const x=1+(i+1)*ww-8;
+    s+=`<rect x="${x}" y="1" width="16" height="${bh}" rx="2" fill="${on?'var(--brass)':'var(--fg)'}"/>`;
+    if(on)s+=`<text x="${x+8}" y="${bh-8}" text-anchor="middle" font-size="10" font-weight="700" fill="var(--surface)">${at[pc]}</text>`;}
+  return s+`</svg>`;}
+
+/* ---------- akordeono etapai ---------- */
+const ACC=[
+{title:"Laikysena, dumplės ir C pozicija",
+ focus:"Patogiai laikome akordeoną, išmokstame lygiai traukti dumples ir randame C dešine bei kaire.",
+ theory:`<h3>Akordeonas iš trijų dalių</h3><p><b>Dešinė ranka</b> groja melodiją klavišais, kaip pianinu. <b>Kairė ranka</b> spaudžia bosų sagutes ir traukia dumples. <b>Dumplės</b> yra garso šaltinis: kol jos juda, liežuvėliai skamba.</p>
+ <h3>Dumplės = gitaros kirtis</h3><p>Kaip gitaroje garsas priklauso nuo kirčio, taip akordeone nuo dumplių. Lygus spaudimas duoda lygų garsą. Kryptį keiskite tik takto pradžioje, ne melodijos viduryje.</p>
+ <h3>Natos tos pačios</h3><p>C D E F G A B yra tos pačios natos, kurias mokotės gitaroje. Klaviatūroje C yra prieš dviejų juodų klavišų grupę.</p>${scaleRow(["C","D","E","F","G"])}
+ <h3>Pirštai</h3><p>Dešinės pirštai numeruojami nuo nykščio: 1 nykštys, 5 mažylis. C pozicijoje kiekvienas pirštas turi savo klavišą: C1 D2 E3 F4 G5.</p>
+ <h3>Kairė ranka</h3><p>C bosą rasite pagal įdubimą arba žiedą. Šalia jo (toliau nuo dumplių) yra C mažorinis akordas. Bosui naudokite 3 pirštą, akordui 2 pirštą. „Um-pa“: bosas 1 ir 3 tvaksniu, akordas 2 ir 4.</p>`,
+ ex:[
+  {id:"warm",n:"Apšilimas ir laikysena",m:2,h:"Sėskite ant kėdės krašto, akordeonas remiasi į kairę šlaunį. Peties diržus priveržkite tiek, kad pasilenkus akordeonas nenuslystų. Kairės rankos diržas: plaštaka įlenda iki krumplių. Laikydami oro mygtuką 4 kartus be garso atidarykite ir uždarykite dumples."},
+  {id:"bel",n:"Dumplių lygumas",m:4,bpm:60,bel:true,bass:["C:B"],h:"Laikykite C bosą (arba C dešine). Pagal metronomą traukite dumples nurodytą tvaksnių skaičių, tada tiek pat spauskite. Mikrofonas matuoja, ar garsas lygus ir ar keičiant kryptį nėra tylos. Telefoną padėkite apie 1 m nuo akordeono."},
+  {id:"rh",n:"Penki pirštai C pozicijoje",m:6,bpm:60,kb:{n:["C","D","E","F","G"],f:[1,2,3,4,5]},kn:true,h:"C D E F G aukštyn ir žemyn, viena nata vienam tvaksniui, sakydami natų pavadinimus garsiai. Paskui natų treniruoklis: programėlė rodo natą, jūs ją grojate."},
+  {id:"lh",n:"Kairė: C bosas ir C akordas",m:5,bpm:60,bass:["C:B","C:M"],h:"Raskite C bosą nežiūrėdami, pagal įdubimą. „Um-pa“: 3 pirštu bosas 1 ir 3 tvaksniu, 2 pirštu akordas 2 ir 4. Trumpai, aiškiai, dumplės juda lygiai. 8 taktai, tada keiskite dumplių kryptį."},
+  {id:"both",n:"Abi rankos: nata ir um-pa",m:5,bpm:60,bass:["C:B","C:M"],kb:{n:["C","D","E","F","G"],f:[1,2,3,4,5]},h:"Kaire grokite „um-pa“, dešine kas taktą vieną natą: C, D, E, F, G ir atgal. Kai pavyksta, dešine po dvi natas taktui."},
+  {id:"song",n:"Daina",m:6,bpm:70,song:true,opts:[
+    {n:"Odė džiaugsmui",h:"Dešine C pozicijoje: E E F G | G F E D | C C D E | E· D D | E E F G | G F E D | C C D E | D· C C. Pirmiausia tik dešine. Kai skamba be sustojimų, pridėkite C bosą kiekvieno takto pradžioje."},
+    {n:"Mirk, mirk, žvaigždute",h:"C C G G | A A G – | F F E E | D D C – | G G F F | E E D – | G G F F | E E D – | C C G G | A A G – | F F E E | D D C –. A pasiekite 5 pirštu, G tada groja 4 pirštas."}]},
+  {id:"ear",n:"Klausa: aukščiau ar žemiau",m:2,ear:"hl",h:"Tas pats klausos treniruoklis kaip gitaroje. Klausa bendra abiem instrumentams."}],
+ goals:[{t:"Dumplių lygumas: bent 7 balai",k:"bel",min:7},{t:"Natos C–G: vidutiniškai iki 3 s be klaidų",k:"kn",max:3},{t:"„Um-pa“ C su metronomu 60 bpm 8 taktus nesustodamas",k:"self"},{t:"Daina dešine ranka nuo pradžios iki galo be sustojimų",k:"self"}]},
+
+{title:"C dur gama ir C, G7, F bosai",
+ focus:"Visa gama dešine su nykščio pakišimu ir trys svarbiausi akordai kaire.",
+ theory:`<h3>Gama su pakišimu</h3><p>C dur gama: <span class="k">C D E F G A B C</span>, ta pati formulė <span class="k">T T P T T T P</span> kaip gitaroje. Pirštuotė aukštyn: <b>1 2 3</b>, nykštys pakiša po delnu ant F, tada <b>1 2 3 4 5</b>. Žemyn: 5 4 3 2 1, 3 pirštas peršoka ant E, 2 1.</p>${scaleRow(["C","D","E","F","G","A","B"])}
+ <h3>Bosai pagal kvintų ratą</h3><p>Bosų stulpeliai išdėstyti kvintomis: žemyn nuo C yra <b>G</b>, aukštyn <b>F</b>. Tai I, V ir IV laipsniai, kuriuos jau žinote iš gitaros.</p>
+ <h3>G7 vietoj G</h3><p>Akordeone dažniau naudojamas <b>G7</b> (septakordų eilė). Jis „traukia“ atgal į C, kaip gitaroje G7 → C.</p>
+ <h3>Valsas</h3><p>3/4 taktas: <span class="k">bosas – akordas – akordas</span>, skaičiuojant <span class="k">1 2 3</span>.</p>`,
+ ex:[
+  {id:"warm",n:"Apšilimas",m:2,h:"Laikysenos patikra, 4 tylūs dumplių judesiai su oro mygtuku, pirštų tempimas."},
+  {id:"bel",n:"Dumplių lygumas",m:4,bpm:60,bel:true,bass:["C:B"],h:"Kaip anksčiau. Kai pavyksta lygiai, programėlė pailgina dumplių judesį (6, tada 8 tvaksniai): ilgas lygus judesys yra sunkiausias."},
+  {id:"rh",n:"C dur gama",m:6,bpm:60,kb:{n:["C","D","E","F","G","A","B","C"],f:[1,2,3,1,2,3,4,5]},kn:true,h:"Aukštyn 1 2 3 1 2 3 4 5, žemyn 5 4 3 2 1 3 2 1. Nykščio pakišimas turi būti tylus, be pauzės. 2 kartus aukštyn ir žemyn, tada natų treniruoklis."},
+  {id:"lh",n:"C, G7 ir F „um-pa“",m:5,bpm:70,bass:["C:B","C:M","G:B","G:7","F:B","F:M"],h:"Po 2 taktus: C – G7 – C – F – C. G bosas yra vienu stulpeliu žemiau C, F aukščiau. G7 akordas yra septakordų eilėje. Tada valsas 3/4: bosas, akordas, akordas."},
+  {id:"both",n:"Gama su bosu",m:5,bpm:60,bass:["C:B","C:M"],kb:{n:["C","D","E","F","G","A","B","C"],f:[1,2,3,1,2,3,4,5]},h:"Dešine gama po vieną natą tvaksniui, kaire C bosas kiekvieno takto pradžioje. Paskui kaire „um-pa“."},
+  {id:"song",n:"Daina",m:6,bpm:70,song:true,opts:[
+    {n:"Odė džiaugsmui su bosais",h:"E E F G (C) | G F E D (G7) | C C D E (C) | E· D D (G7) | E E F G (C) | G F E D (G7) | C C D E (C) | D· C C (G7, C). Skliaustuose akordas kairei, „um-pa“ ritmu."},
+    {n:"When the Saints",h:"C E F G – – | C E F G – – | C E F G E C E D – (C, G7 ant „E D“) | E E D C C E G G F (C, F) | E F G E C D C (C, G7, C). Kaire C, F ir G7."}]},
+  {id:"ear",n:"Klausa: intervalai",m:2,ear:"iv",h:"Intervalai: tie patys atstumai tarp natų, kuriuos jau girdėjote gitaroje."}],
+ goals:[{t:"Dumplių lygumas: bent 8 balai",k:"bel",min:8},{t:"Natos C–B: vidutiniškai iki 2,5 s be klaidų",k:"kn",max:2.5},{t:"C dur gama 70 bpm aukštyn ir žemyn 2 kartus be klaidų",k:"self"},{t:"Odė džiaugsmui abiem rankomis nesustojant",k:"self"},{t:"Valsas C–G7 3/4 60 bpm 16 taktų",k:"self"}]},
+
+{title:"Minoriniai akordai ir kintamas bosas",
+ focus:"Am, Dm, Em akordai, gyvesnis bosas ir pirmoji gama su diezu.",
+ theory:`<h3>Minorų eilė</h3><p>Minorinis akordas yra vienu sagutės žingsniu toliau nuo dumplių nei mažorinis. <b>Am</b> yra A stulpelyje, 3 stulpeliai žemiau C.</p>
+ <h3>Tonacijos akordai</h3><p>Kaip gitaroje: C dur tonacijoje <span class="k">I C · IV F · V G · vi Am · ii Dm · iii Em</span>. Progresija <b>I–V–vi–IV</b> = C–G–Am–F.</p>
+ <h3>Kintamas bosas</h3><p>Vietoj to paties boso kas tvaksnį kaitaliojame akordo pagrindą ir kvintą: <span class="k">C bosas – akordas – G bosas – akordas</span>. Kvintos bosas visada yra vienu stulpeliu žemiau.</p>
+ <h3>G dur gama</h3><p>Ta pati formulė nuo G: <span class="k">G A B C D E F# G</span>. Formulė pakelia F į F#, juodą klavišą. Pirštuotė kaip C dur: 1 2 3 1 2 3 4 5.</p>${scaleRow(["G","A","B","C","D","E","F#"])}
+ <h3>Dinamika</h3><p>Garsumą valdo tik dumplės: greičiau traukiate, garsiau skamba. Klavišą spaudžiant stipriau garsas nepasikeičia.</p>`,
+ ex:[
+  {id:"warm",n:"Apšilimas",m:2,h:"Laikysena, tylūs dumplių judesiai, pirštų tempimas."},
+  {id:"bel",n:"Dumplės ir dinamika",m:4,bpm:60,bel:true,bass:["C:B"],h:"Pirmiausia lygumo matavimas. Paskui be matavimo: 2 taktai tyliai, 2 garsiai, tada palaipsniui garsėjant ir tylant."},
+  {id:"rh",n:"G dur gama",m:6,bpm:60,kb:{n:["G","A","B","C","D","E","F#","G"],f:[1,2,3,1,2,3,4,5]},kn:true,h:"Pirštuotė 1 2 3 1 2 3 4 5, F# spaudžia 4 pirštas. Pakartokite ir C dur. Paskui natų treniruoklis su F#."},
+  {id:"lh",n:"Minorai ir kintamas bosas",m:5,bpm:70,bass:["C:B","C:M","G:B","A:B","A:m","D:B","D:m","E:B","E:m"],h:"Am, Dm, Em po 2 taktus. Tada C su kintamu bosu: C bosas, C akordas, G bosas, C akordas. Am: A bosas, Am, E bosas, Am."},
+  {id:"both",n:"I–V–vi–IV",m:5,bpm:70,bass:["C:B","C:M","G:B","G:M","A:B","A:m","F:B","F:M"],h:"C–G–Am–F po taktą su kintamu bosu. Dešine laikykite vieną akordo natą per visą taktą: E, D, C, C. Kai pavyksta, sugalvokite savo trumpą melodiją."},
+  {id:"song",n:"Daina",m:6,bpm:80,song:true,opts:[
+    {n:"Mėnulio šviesoje (Au clair de la lune)",h:"C C C D | E – D – | C E D D | C – – – (du kartus). Tada D D D D | A – A – | D C B A | G – – –, ir vėl pirmoji eilutė. Kaire C ir G7 su kintamu bosu."},
+    {n:"Savo melodija ant I–V–vi–IV",h:"Kaire C–G–Am–F su kintamu bosu, dešine improvizuokite tik C dur natomis. Laikykitės akordo natų takto pradžioje."}]},
+  {id:"ear",n:"Klausa: akordai",m:2,ear:"ch",h:"Majoras ar minoras: tas pats skirtumas, kurį girdite tarp akordeono M ir m eilių."}],
+ goals:[{t:"Dumplių lygumas: bent 8 balai, 6 tvaksnių judesiu",k:"bel",min:8,lv:1},{t:"Natos su F#: vidutiniškai iki 2 s be klaidų",k:"kn",max:2},{t:"I–V–vi–IV C tonacijoje su kintamu bosu 80 bpm",k:"self"},{t:"G dur gama 70 bpm aukštyn ir žemyn be klaidų",k:"self"}]},
+
+{title:"F tonacija, polka ir artikuliacija",
+ focus:"Pirmoji tonacija su bemoliu, trumpas ir rišlus grojimas, linksmas polkos ritmas.",
+ theory:`<h3>F dur</h3><p>Formulė nuo F: <span class="k">F G A B♭ C D E F</span>. Pirštuotė dešine kitokia: <b>1 2 3 4 1 2 3 4</b>, nes nykštys negali spausti B♭.</p>${scaleRow(["F","G","A","B♭","C","D","E"])}
+ <h3>Kvintų ratas kairėje</h3><p>Aukštyn nuo C: <span class="k">F → B♭ → E♭</span>, kiekvienas žingsnis prideda bemolį. Žemyn: <span class="k">G → D → A</span>, kiekvienas prideda diezą. F tonacijos akordai: F, B♭ ir C7.</p>
+ <h3>Staccato ir legato</h3><p><b>Staccato</b>: trumpai, pirštas tuoj pat atšoka. <b>Legato</b>: nata pereina į kitą be tarpo. Polkoje kairė groja staccato, dešinė dažnai legato.</p>
+ <h3>Polka 2/4</h3><p><span class="k">bosas – akordas</span>, skaičiuojant <span class="k">1 ir 2 ir</span>: bosas ant skaičių, akordas ant „ir“.</p>`,
+ ex:[
+  {id:"warm",n:"Apšilimas",m:2,h:"Laikysena, tylūs dumplių judesiai, pirštų tempimas."},
+  {id:"bel",n:"Dumplių lygumas",m:3,bpm:60,bel:true,bass:["F:B"],h:"Lygumo matavimas su F bosu. Paskui be matavimo: trumpi dumplių „smūgiai“ staccato bosams."},
+  {id:"rh",n:"F dur gama",m:6,bpm:60,kb:{n:["F","G","A","B♭","C","D","E","F"],f:[1,2,3,4,1,2,3,4]},kn:true,h:"Aukštyn 1 2 3 4 1 2 3 4, nykštys pakiša ant C. Pirmiausia legato, tada staccato. Paskui natų treniruoklis su B♭."},
+  {id:"lh",n:"Polka: F, C7, B♭",m:5,bpm:80,bass:["F:B","F:M","C:B","C:7","B♭:B","B♭:M"],h:"2/4: bosas ant skaičiaus, akordas ant „ir“, abu staccato. F – C7 – F – B♭ – F – C7 – F po 2 taktus."},
+  {id:"both",n:"Legato dešine, staccato kaire",m:5,bpm:70,bass:["F:B","F:M","C:B","C:7"],kb:{n:["F","G","A","B♭","C"],f:[1,2,3,4,5]},h:"Dešine F G A B♭ C ir atgal legato, kaire polkos bosai staccato. Rankos turi groti skirtingai, tai pagrindinis šio etapo įgūdis."},
+  {id:"song",n:"Daina",m:7,bpm:90,song:true,opts:[
+    {n:"Oh! Susanna (F)",h:"F G A C C D C A F G A A G F G – (F, C7) | F G A C C D C A F G A A G G F – (F, C7, F). Kaire polka: F ir C7 staccato."},
+    {n:"Polka pagal savo pasirinkimą",h:"Raskite paprastos polkos natas (pvz. „Rosamunde“) F arba C tonacijoje. Iš pradžių tik pirmos 8 taktų."}]},
+  {id:"ear",n:"Klausa: septakordai",m:2,ear:"ch",h:"Septakordas skamba kaip akordeono 7 eilė: „nori“ pereiti į kitą akordą."}],
+ goals:[{t:"Dumplių lygumas: bent 8 balai, 6 tvaksnių judesiu",k:"bel",min:8,lv:1},{t:"Natos su B♭: vidutiniškai iki 2 s be klaidų",k:"kn",max:2},{t:"Polka 90 bpm su staccato bosais 16 taktų",k:"self"},{t:"F dur gama 80 bpm legato ir staccato",k:"self"}]},
+
+{title:"Registrai, tremolo ir a moll",
+ focus:"Pažįstame akordeono spalvas, pirmasis efektas dumplėmis ir minorinė gama.",
+ theory:`<h3>Registrai</h3><p>Registrų jungikliai įjungia skirtingus liežuvėlių rinkinius. Vienas balsas skamba švariai ir tinka mikrofono pratimams. <b>Musette</b> (keli šiek tiek išderinti balsai) skamba „virpančiai“, prancūziškai. Žemas balsas duoda storą, vargonų spalvą.</p>
+ <h3>Dumplių tremolo</h3><p>Greitas dumplių kratymas (bellows shake): kryptis keičiama kas pusę tvaksnio, kairė ranka juda nuo alkūnės, nedideliu judesiu.</p>
+ <h3>Harmoninė a moll</h3><p>a moll yra C dur paralelinis minoras, kaip gitaroje Am ir C. Harmoninėje gamoje G pakeliamas į <b>G#</b>, kad E7 akordas „trauktų“ į Am.</p>${scaleRow(["A","B","C","D","E","F","G#"])}
+ <h3>Trigarsiai dešine</h3><p>Akordą galima groti ir dešine: C = C E G (1 3 5 pirštai). Tos pačios 1–3–5 natos kaip gitaros akorduose.</p>`,
+ ex:[
+  {id:"warm",n:"Apšilimas ir registrai",m:2,h:"Pagrokite C dur gamą kiekvienu registru ir klausykite, kuo jie skiriasi. Mikrofono pratimams pasirinkite vieno balso registrą."},
+  {id:"bel",n:"Dumplių lygumas",m:3,bpm:60,bel:true,bass:["A:B"],h:"Lygumo matavimas su A bosu, ilgu judesiu."},
+  {id:"trem",n:"Dumplių tremolo",m:3,bpm:60,bass:["A:m"],h:"Laikykite Am akordą. Krypties keitimas kas pusę tvaksnio (aštuntinėmis) 60 bpm. Judesys mažas, garsas tolygus. Kai pavyksta 4 taktus, kelkite tempą."},
+  {id:"rh",n:"Harmoninė a moll ir trigarsiai",m:5,bpm:60,kb:{n:["A","B","C","D","E","F","G#","A"],f:[1,2,3,1,2,3,4,5]},kn:true,h:"Pirštuotė 1 2 3 1 2 3 4 5, G# 4 pirštu. Tada trigarsiai dešine: C (C E G), F (C F A), G7 (B F G), kiekvienas po taktą."},
+  {id:"lh",n:"Valsas: Am, Dm, E7",m:4,bpm:80,bass:["A:B","A:m","D:B","D:m","E:B","E:7"],h:"3/4: bosas, akordas, akordas. Am – Dm – E7 – Am po 2 taktus, tada su kintamu bosu."},
+  {id:"song",n:"Daina",m:7,bpm:80,song:true,opts:[
+    {n:"Minorinis valsas",h:"Kaire Am – Dm – E7 – Am valsu, dešine melodija iš a moll natų. Pradėkite nuo A C E | D – – | B D E | A – –."},
+    {n:"„Dunojaus bangos“ (supaprastinta)",h:"Raskite supaprastintas natas pradedantiesiems. Pirmiausia tik pirmoji 16 taktų dalis, kaire valsas."}]},
+  {id:"ear",n:"Klausa: progresijos",m:2,ear:"pr",h:"Atpažinkite I–IV–V ir I–V–vi–IV. Tai raktas į akompanavimą iš klausos kitame etape."}],
+ goals:[{t:"Dumplių lygumas: bent 8 balai, 8 tvaksnių judesiu",k:"bel",min:8,lv:2},{t:"Natos su G#: vidutiniškai iki 2 s be klaidų",k:"kn",max:2},{t:"Harmoninė a moll 80 bpm be klaidų",k:"self"},{t:"Tremolo: 4 taktai lygiu garsu",k:"self"}]},
+
+{title:"Akompanimentas ir savarankiškumas",
+ focus:"Akompanuojame dainoms bet kurioje tonacijoje ir mokomės melodijas iš klausos.",
+ theory:`<h3>Akompanimentas pagal laipsnius</h3><p>Kairėje laipsniai visada ta pati forma: <b>I</b> pasirinktas stulpelis, <b>V</b> vienas žemyn, <b>IV</b> vienas aukštyn, <b>vi</b> trys žemyn minorų eilėje. Todėl pakeitus tonaciją ranka juda ta pačia forma.</p>
+ <h3>Transpozicija</h3><p>Kaip gitaroje: užsirašykite dainą laipsniais (I–IV–V7–I), tada sugrokite nuo kito stulpelio. G dur: G, C, D7. D dur: D, G, A7.</p>
+ <h3>Iš klausos</h3><p>Raskite pirmą melodijos natą dešine, tada ieškokite kitų: aukščiau ar žemiau, kiek toli. Akordą parinkite iš I, IV, V7, vi.</p>`,
+ ex:[
+  {id:"warm",n:"Apšilimas",m:2,h:"Laikysena, tylūs dumplių judesiai, 1 tremolo taktas."},
+  {id:"bel",n:"Dumplių lygumas",m:3,bpm:60,bel:true,bass:["G:B"],h:"Lygumo matavimas su G bosu."},
+  {id:"rh",n:"G ir D dur gamos",m:5,bpm:70,kb:{n:["D","E","F#","G","A","B","C#","D"],f:[1,2,3,1,2,3,4,5]},kn:true,h:"G dur ir D dur (D E F# G A B C# D), abi 1 2 3 1 2 3 4 5. Natų treniruoklyje dabar visos 12 natų."},
+  {id:"lh",n:"I–IV–V7 trijose tonacijose",m:5,bpm:80,bass:["C:B","C:M","F:B","F:M","G:B","G:7","D:B","D:M","D:7","A:B","A:7"],h:"C: C–F–G7–C, G: G–C–D7–G, D: D–G–A7–D. Ranka juda ta pačia forma, tik nuo kito stulpelio."},
+  {id:"transp",n:"Transpozicija",m:5,bpm:70,h:"Paimkite ankstesnio etapo dainą ir sugrokite ją G dur: melodiją perkelkite 5 natomis aukštyn (C→G), kairę vienu stulpeliu žemyn."},
+  {id:"song",n:"Daina iš klausos",m:8,song:true,opts:[
+    {n:"Su gimtadieniu",h:"Išmokite iš klausos C dur. Užuomina: pirmos natos G G A G C B. Akordai C, G7 ir F."},
+    {n:"Pasirinkta daina",h:"Pasirinkite dainą, kurią mėgstate. Raskite melodiją dešine, tada akordus iš I, IV, V7, vi."}]},
+  {id:"ear",n:"Klausa: progresijos",m:2,ear:"pr",h:"Progresijų atpažinimas, kad akompanimentą rastumėte iš klausos."}],
+ goals:[{t:"Visos 12 natų: vidutiniškai iki 2 s be klaidų",k:"kn",max:2},{t:"Dainą akompanuoju 3 tonacijose (C, G, D)",k:"self"},{t:"Bent vieną dainą išmokau iš klausos",k:"self"},{t:"3 dainas groju nuo pradžios iki galo",k:"self"}]}
+];
+/* natų treniruoklio natos pagal etapą */
+const KN_POOL=[["C","D","E","F","G"],["C","D","E","F","G","A","B"],["C","D","E","F","G","A","B","F#"],["C","D","E","F","G","A","B","F#","B♭"],["C","D","E","F","G","A","B","F#","B♭","G#"],PCNAME];
+
+/* ---------- akordeono būsena, dienos ir sunkumas ---------- */
+function A_(){return accS();}
+function accAdjKey(id){return A_().phase+":"+id;}
+function accBpm(ex){return Math.max(40,Math.min(200,(ex.bpm||0)+((A_().bpmAdj||{})[accAdjKey(ex.id)]||0)));}
+function accLive(e){let x=e;if(e.song&&e.opts){const k=Math.min(((A_().song||{})[A_().phase])||0,e.opts.length-1);x=Object.assign({},e,{h:e.opts[k].h,songN:e.opts[k].n});}if(x.bpm)x=Object.assign({},x,{bpm:accBpm(x),baseBpm:e.bpm});return x;}
+function accCurEx(){const all=ACC[A_().phase].ex.map(accLive);if(A_().shortDay!==todayStr())return all;
+  const pick=["bel","rh","song"].map(id=>all.find(e=>e.id===id)).filter(Boolean);return pick.map(e=>Object.assign({},e,{m:e.id==="song"?4:3,shortM:true}));}
+function accDays(){const A=A_();return Object.keys(A.done||{}).filter(d=>d>=A.phaseStart&&(A.done[d]||[]).length).sort();}
+function accDay(){const t=todayStr();return accDays().filter(d=>d<t).length+1;}
+function accRate(id,v){const A=A_();if(!A.bpmAdj)A.bpmAdj={};if(!A.rated)A.rated={};const k=accAdjKey(id);const t=todayStr();
+  const r=A.rated[t]||(A.rated[t]=[]);if(r.includes(k))return;r.push(k);Object.keys(A.rated).forEach(d=>{if(daysBetween(d,t)>3)delete A.rated[d];});
+  const ex=ACC[A.phase].ex.find(e=>e.id===id);const cur=A.bpmAdj[k]||0;const nb=Math.max(-20,Math.min(60,cur+v));A.bpmAdj[k]=nb;save();
+  if(v>0)lvlToast(`Tempas pakeltas: ${ex.n} dabar ${accBpm(ex)} bpm.`);else if(v<0)lvlToast(`Tempas sumažintas: ${ex.n} dabar ${accBpm(ex)} bpm.`);else toast("Tempas lieka tas pats.");renderToday();}
+/* tikslai */
+function accGoal(ph,i){const A=A_();const g=ACC[ph].goals[i];const t=todayStr();
+  if(g.k==="self"){const D=(A.gdays||{})[ph+":"+i]||[];const n=D.length;return {g,ok:n>=3,pct:n/3,txt:n>=3?"Įvykdyta 3 skirtingas dienas.":`Pažymėkite „Pavyko šiandien“, kai įvykdote. Liko ${3-n} d.${D.includes(t)?" Šiandien jau pažymėta.":""}`,act:D.includes(t)||n>=3?'':`<button class="btn small" data-akgoal="${ph}:${i}">Pavyko šiandien</button>`};}
+  if(g.k==="bel"){const lv=g.lv||0;const days=[...new Set((A.belHist||[]).filter(x=>x.ph>=ph&&x.lv>=lv&&x.score>=g.min).map(x=>x.d))];const n=days.length;
+    const best=(A.belHist||[]).filter(x=>x.d===t).reduce((m,x)=>Math.max(m,x.score),-1);
+    return {g,ok:n>=3,pct:n/3,txt:n>=3?"Pasiekta 3 skirtingas dienas.":`Reikia ${g.min} balų${lv?` ${[4,6,8][lv]} tvaksnių judesiu`:''} 3 skirtingas dienas. Kol kas ${n} d.${best>=0?` Šiandien geriausias: ${fx(best)}.`:''} Matuojama pratime „Dumplių lygumas“.`};}
+  if(g.k==="kn"){const days=[...new Set((A.knHist||[]).filter(x=>x.ph>=ph&&x.err===0&&x.avg<=g.max).map(x=>x.d))];const n=days.length;const last=(A.knHist||[]).filter(x=>x.ph>=ph).slice(-1)[0];
+    return {g,ok:n>=3,pct:n/3,txt:n>=3?"Pasiekta 3 skirtingas dienas.":`Reikia ratą įveikti iki ${String(g.max).replace(".",",")} s be klaidų 3 skirtingas dienas. Kol kas ${n} d.${last?` Paskutinis: ${fx(last.avg)} s, klaidų ${last.err}.`:''}`};}
+  return {g,ok:false,pct:0,txt:""};}
+function accGoalsOk(ph){return ACC[ph].goals.map((_,i)=>accGoal(ph,i).ok);}
+function accGo(n){const A=A_();A.maxPhase=Math.max(A.maxPhase||0,A.phase,n);A.phase=n;A.phaseStart=todayStr();accConfirm=false;if(T.running)pauseT();T.id=null;save();renderAll();toast((n+1)+" etapas: "+ACC[n].title);}
+function accAuto(){const A=A_();if(A.phase>=ACC.length-1||busy())return;A.maxPhase=Math.max(A.maxPhase||0,A.phase);if(A.phase<A.maxPhase)return;if(!accGoalsOk(A.phase).every(Boolean))return;
+  const n=A.phase+1;A.phaseAuto={to:n,d:todayStr()};accGo(n);lvlToast(`Visi tikslai pasiekti! Automatiškai pereita į ${n+1} etapą: ${ACC[n].title}`);}
+let accConfirm=false;
+
+/* ---------- mikrofono pratimai: dumplių lygumas ir natos klaviatūroje ---------- */
+const AK={active:false,mode:null,view:"today",t0:0,frames:[],seg:0,started:false,round:null,res:null,lastPc:null,okSince:0,badSince:0,hist:[]};
+const BEL_LV=[4,6,8];
+function akStop(){if(!AK.active)return;AK.active=false;if(AK.metroOwn){AK.metroOwn=false;stopM();}micOff();akPaint();}
+async function akStart(mode,view,bpm){releaseMic();if(E.sess)endSess();if(!(await micOn()))return;AK.active=true;AK.mode=mode;AK.view=view;AK.res=null;AK.hist=[];
+  if(mode==="bel"){AK.bpm=bpm||60;AK.beats=BEL_LV[A_().belLv||0];AK.dur=4*AK.beats*60/AK.bpm;AK.frames=[];AK.started=false;AK.t0=0;setBpm(AK.bpm);if(!M.running){M.per=4;startM();AK.metroOwn=true;}}
+  else{AK.round={items:[],cur:null,len:10,pool:KN_POOL[A_().phase]};AK.lastPc=null;akNext();}
+  akPaint();}
+function akRms(){const b=P.buf;let r=0;for(let i=0;i<b.length;i+=2)r+=b[i]*b[i];return Math.sqrt(2*r/b.length);}
+function akFrame(){P.an.getFloatTimeDomainData(P.buf);const now=performance.now();
+  if(AK.mode==="bel"){const r=akRms();const db=20*Math.log10(Math.max(r,1e-5));
+    if(!AK.started){if(r>0.02){AK.started=true;AK.t0=now;}else{akLive("Pradėkite groti: matavimas prasidės, kai išgirsiu garsą.");return;}}
+    const t=(now-AK.t0)/1000;AK.frames.push({t,db});const seg=Math.floor(t/(AK.beats*60/AK.bpm));
+    if(t>=AK.dur){akBelEnd();return;}
+    const left=Math.ceil(AK.beats-((t%(AK.beats*60/AK.bpm))/(60/AK.bpm)));
+    akLive(`${seg%2===0?"Traukite":"Spauskite"} dumples · liko ${left} tv. · ${seg+1} iš 4`);
+    if(AK.frames.length%6===0)akDrawLive();return;}
+  /* natos */
+  const R=AK.round;if(!R||!R.cur)return;frameFlip=!frameFlip;if(frameFlip)return;
+  const f=performance.now()<(P.muteUntil||0)?-1:detectPitch(P.buf,AC.sampleRate);AK.hist.push(f<0?null:noteFromFreq(f));if(AK.hist.length>5)AK.hist.shift();
+  const vals=AK.hist.filter(Boolean);let st=null;if(vals.length>=3){const cnt={};vals.forEach(v=>cnt[v.pc]=(cnt[v.pc]||0)+1);const top=Object.keys(cnt).sort((x,y)=>cnt[y]-cnt[x])[0];if(cnt[top]>=3)st=vals.filter(v=>v.pc==top).pop();}
+  const heard=document.querySelector(".ak-heard");if(heard)heard.textContent=st?"Girdžiu: "+PCNAME[st.pc]:"Klausau…";
+  if(!st){AK.okSince=0;AK.badSince=0;if(heard)heard.className="heard ak-heard";return;}
+  const it=R.cur;if(st.pc===it.pc){if(heard)heard.className="heard ak-heard good";if(!AK.okSince)AK.okSince=now;else if(now-AK.okSince>150)akDone();return;}
+  AK.okSince=0;if(st.pc===AK.lastPc&&now-it.t0<2500)return;if(heard)heard.className="heard ak-heard bad";
+  if(!AK.badSince)AK.badSince=now;else if(now-AK.badSince>350&&!it.wrong){it.wrong=true;beep(false);akPaint();}}
+function akNext(){const R=AK.round;const pool=R.pool.filter(n=>!R.cur||accPc(n)!==R.cur.pc);const n=rnd(pool);R.cur={n,pc:accPc(n),t0:performance.now(),wrong:false};AK.okSince=0;AK.badSince=0;AK.hist=[];akPaint();}
+function akDone(){const R=AK.round;const it=R.cur;const t=(performance.now()-it.t0)/1000;R.items.push({n:it.n,t,wrong:it.wrong});AK.lastPc=it.pc;beep(true);
+  if(R.items.length>=R.len){const avg=R.items.reduce((a,x)=>a+x.t,0)/R.items.length;const err=R.items.filter(x=>x.wrong).length;const A=A_();if(!A.knHist)A.knHist=[];
+    A.knHist.push({d:todayStr(),ph:A.phase,avg:+avg.toFixed(2),err});if(A.knHist.length>200)A.knHist.splice(0,A.knHist.length-200);AK.res={kind:"kn",avg,err,items:R.items};AK.round=null;save();akStop();accAuto();return;}
+  akNext();}
+function akBelEnd(){const F=AK.frames;AK.active=false;if(AK.metroOwn){AK.metroOwn=false;stopM();}micOff();
+  // glotniname 5 kadrų mediana, kad metronomo spragsėjimai neiškreiptų
+  const sm=F.map((x,i)=>{const w=F.slice(Math.max(0,i-2),i+3).map(y=>y.db).sort((a,b)=>a-b);return {t:x.t,db:w[w.length>>1]};});
+  const srt=sm.map(x=>x.db).sort((a,b)=>a-b);const med=srt[Math.floor(srt.length*0.9)]||-60;
+  const dt=sm.length>1?(sm[sm.length-1].t-sm[0].t)/(sm.length-1):0.016;
+  const gapFr=sm.filter(x=>x.db<med-15);const gap=gapFr.length*dt;
+  const snd=sm.filter(x=>x.db>=med-15).map(x=>x.db);const mean=snd.reduce((a,b)=>a+b,0)/Math.max(1,snd.length);const sd=Math.sqrt(snd.reduce((a,b)=>a+(b-mean)*(b-mean),0)/Math.max(1,snd.length));
+  let score=10-Math.max(0,sd-1.5)*1.5-Math.max(0,gap-0.3)*4;if(med<-50)score=0;score=Math.max(0,Math.min(10,Math.round(score*10)/10));
+  const A=A_();if(!A.belHist)A.belHist=[];const lv=A.belLv||0;A.belHist.push({d:todayStr(),ph:A.phase,lv,score,sd:+sd.toFixed(1),gap:+gap.toFixed(2)});if(A.belHist.length>200)A.belHist.splice(0,A.belHist.length-200);
+  // automatinis sunkumas: 2 kartai iš eilės ≥ 8 – ilgesnis judesys, 2 kartai < 5 – trumpesnis
+  const L=A.belHist.filter(x=>x.lv===lv).slice(-2);let msg="";
+  if(L.length===2&&L.every(x=>x.score>=8)&&lv<BEL_LV.length-1){A.belLv=lv+1;msg=`Puiku! Dabar dumples trauksite ${BEL_LV[lv+1]} tvaksnius.`;}
+  else if(L.length===2&&L.every(x=>x.score<5)&&lv>0){A.belLv=lv-1;msg=`Grįžtame prie ${BEL_LV[lv-1]} tvaksnių judesio, kol garsas taps lygesnis.`;}
+  AK.res={kind:"bel",score,sd,gap,frames:sm,med,beats:AK.beats,bpm:AK.bpm,msg};save();if(msg)lvlToast(msg);akPaint();accAuto();}
+function fx(n,d){return n.toFixed(d==null?1:d).replace(".",",");}
+function akLive(s){document.querySelectorAll(".ak-live").forEach(e=>e.textContent=s);}
+function akGraph(frames,med,beats,bpm){if(!frames.length)return '';const W=320,H=80;const T0=4*beats*60/bpm;const lo=med-30,hi=med+6;
+  const y=db=>H-Math.max(0,Math.min(1,(db-lo)/(hi-lo)))*H;const pts=frames.filter((_,i)=>i%2===0).map(f=>`${(f.t/T0*W).toFixed(1)},${y(f.db).toFixed(1)}`).join(" ");
+  let s=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:420px;background:var(--surface);border:1px solid var(--line);border-radius:8px">`;
+  for(let k=1;k<4;k++)s+=`<line x1="${k*W/4}" x2="${k*W/4}" y1="0" y2="${H}" stroke="var(--line)" stroke-dasharray="3 3"/>`;
+  s+=`<line x1="0" x2="${W}" y1="${y(med)}" y2="${y(med)}" stroke="var(--muted)" stroke-width=".5"/><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2"/></svg>`;return s;}
+function akDrawLive(){const el=document.querySelector(".ak-graph");if(!el)return;const F=AK.frames;const srt=F.map(x=>x.db).sort((a,b)=>a-b);el.innerHTML=akGraph(F,srt[Math.floor(srt.length*0.9)]||-40,AK.beats,AK.bpm);}
+function belHtml(ex,view){const A=A_();const lv=A.belLv||0;
+  if(AK.active&&AK.mode==="bel")return `<span class="eyebrow">Dumplių lygumas · ${AK.beats} tvaksniai į kiekvieną pusę · ${AK.bpm} bpm</span><b class="ak-live" style="font-size:1.2rem">Pradėkite groti</b><div class="ak-graph" style="width:100%;display:flex;justify-content:center"></div><button class="btn small" data-akstop="1">Sustabdyti</button>`;
+  let h=`<span class="eyebrow">Dumplių lygumas · ${BEL_LV[lv]} tvaksniai į kiekvieną pusę</span><span class="muted" style="font-size:.88rem">Laikykite natą ar bosą ir 2 kartus traukite bei spauskite dumples po ${BEL_LV[lv]} tvaksnius. Matavimas prasideda nuo pirmo garso ir trunka ${Math.round(4*BEL_LV[lv]*60/(ex.bpm||60))} s.</span>`;
+  const R=AK.res&&AK.res.kind==="bel"?AK.res:null;
+  if(R)h+=`<b style="font-size:1.6rem">${fx(R.score)} / 10</b>${akGraph(R.frames,R.med,R.beats,R.bpm)}<span style="font-size:.9rem">Garso svyravimas ±${fx(R.sd)} dB${R.sd<=2?" (labai lygu)":R.sd<=4?" (gerai)":" (dar nelygu: spauskite tolygiau)"}. Tyla keičiant kryptį: ${fx(R.gap)} s${R.gap<=0.3?" (puiku)":" (keiskite kryptį greičiau, nepaleidę klavišo)"}.</span>${R.msg?`<span class="heard good">${esc(R.msg)}</span>`:''}`;
+  const L=(A.belHist||[]).slice(-5).reverse();if(L.length&&!R)h+=`<span class="muted" style="font-size:.85rem">Paskutiniai: ${L.map(x=>fx(x.score)).join("; ")}</span>`;
+  return h+`<button class="btn primary" data-akbel="${view}" data-bpm="${ex.bpm||60}">${R?"Matuoti dar kartą":"Pradėti matavimą"}</button>`;}
+function knHtml(view){const pool=KN_POOL[A_().phase];
+  if(AK.active&&AK.mode==="kn"&&AK.round){const R=AK.round,it=R.cur;const hint=it&&performance.now()-it.t0>4000;
+    return `<span class="eyebrow">Natos klaviatūroje · ${R.items.length+1} iš ${R.len}</span><span class="target" style="font-family:var(--f-display);font-weight:700">${esc(it.n)}</span>${it.wrong?'<span class="heard bad">Ne ta nata. Pabandykite dar kartą.</span>':''}<span class="heard ak-heard">Klausau…</span>${kbSvg(hint?[it.n]:[],null,{oct:1})}<span class="muted" style="font-size:.8rem">Bet kuri oktava tinka. Po 4 s klaviatūroje parodysiu, kur ji yra.</span><button class="btn small" data-akstop="1">Sustabdyti</button>`;}
+  const R=AK.res&&AK.res.kind==="kn"?AK.res:null;const L=(A_().knHist||[]).slice(-5).reverse();
+  return `<span class="eyebrow">Natų treniruoklis su mikrofonu</span><span class="muted" style="font-size:.88rem">10 natų: ${pool.join(" ")}. Programėlė rodo natą, jūs grojate ją dešine. Naudokite vieno balso registrą.</span>${R?`<b style="font-size:1.3rem">Vidutiniškai ${fx(R.avg)} s, klaidų ${R.err}</b>`:L.length?`<span class="muted" style="font-size:.85rem">Paskutiniai: ${L.map(x=>fx(x.avg)+" s"+(x.err?` (${x.err} kl.)`:'')).join(", ")}</span>`:''}<button class="btn primary" data-akkn="${view}">${R?"Dar vienas ratas":"Pradėti"}</button>`;}
+function akPaint(){document.querySelectorAll("[data-akbox]").forEach(b=>{const [kind,view]=b.dataset.akbox.split(":");const ex=accCurEx().find(e=>e.bel)||{bpm:60};b.innerHTML=kind==="bel"?belHtml(ex,view):knHtml(view);});if(AK.active&&AK.mode==="kn"){clearTimeout(akPaint._h);akPaint._h=setTimeout(()=>{if(AK.active&&AK.mode==="kn"&&AK.round&&AK.round.cur&&performance.now()-AK.round.cur.t0>4000&&!AK.round.cur.hinted){AK.round.cur.hinted=true;akPaint();}},4100);}}
+
+/* ---------- akordeono vaizdai ---------- */
+function instSwitch(){const a=accOn();return `<div class="row" style="justify-content:flex-start;gap:6px"><button class="btn small" data-inst="gtr" ${tog(!a)}>Gitara</button><button class="btn small" data-inst="acc" ${tog(a)}>Akordeonas</button></div>`;}
+function accSettingsHtml(){const k=bassKey();return `<span class="eyebrow">Akordeono nustatymai · klavišinis</span><span class="muted" style="font-size:.88rem">Kiek bosų turi jūsų akordeonas? Skaičius dažniausiai užrašytas ant korpuso. Pagal jį programėlė rodo bosų schemą ir įspėja, jei kurios sagutės nėra.</span><div class="row" style="justify-content:flex-start;gap:6px">${Object.keys(BASS_PRESETS).map(p=>`<button class="btn small" data-akbass="${p}" ${tog(p===k&&A_().bass)}>${esc(BASS_PRESETS[p].t)}</button>`).join('')}</div>`;}
+function accStatsHtml(){const plan=accCurEx().reduce((a,e)=>a+e.m,0);const g=accGoalsOk(A_().phase).filter(Boolean).length;
+  return `<div class="stats" id="stats"><div class="stat"><b>${Math.floor(secsToday()/60)}/${plan}</b><small>min šiandien</small></div><div class="stat"><b>${streak()}</b><small>dienų iš eilės</small></div><div class="stat"><b>${g}/${ACC[A_().phase].goals.length}</b><small>tikslų pasiekta</small></div></div>`;}
+function accToday(){const v=document.getElementById("v-today");const A=A_();const p=ACC[A.phase];const day=accDay();const dn=doneToday();const open=v.querySelector("details[open]");const openId=open?open.dataset.id:null;const sd=A.shortDay===todayStr();
+  let h=instSwitch()+`<div class="head"><span class="eyebrow">Akordeonas · ${A.phase+1} etapas iš ${ACC.length} · ${day}-a pratybų diena iš ~14</span><h1>${esc(p.title)}</h1><p class="muted">${esc(p.focus)}</p></div>`;
+  h+=A.bass?`<details class="other"><summary>Akordeono nustatymai: ${esc(bassCfg().t)}</summary><div class="drill" style="align-items:stretch;margin-top:8px">${accSettingsHtml()}</div></details>`:`<div class="drill" style="align-items:stretch">${accSettingsHtml()}</div>`;
+  const done=accDays();h+='<div class="fret" aria-label="14 etapo dienų">';for(let i=0;i<Math.max(14,day);i++)h+=`<span class="${i<done.length?'on ':''}${i===day-1?'today':''}"></span>`;h+='</div>';
+  h+=accStatsHtml();
+  if(A.phaseAuto&&A.phaseAuto.to===A.phase&&A.phaseAuto.d===todayStr())h+=`<div class="note"><b>Visi ${A.phase} etapo tikslai pasiekti, todėl pereita į ${A.phase+1} etapą.</b></div>`;
+  h+=`<h2 style="margin-top:8px">Šiandienos pratimai${sd?' · trumpa diena':''}</h2><div class="row" style="justify-content:flex-start"><button class="btn small" data-akshort="1" ${tog(sd)}>${sd?'Grįžti į visą programą':'Turiu tik 10 min: trumpa diena'}</button></div>`;
+  const rated=(A.rated||{})[todayStr()]||[];
+  accCurEx().forEach(ex=>{const d=dn.includes(ex.id);
+    h+=`<details class="ex ${d?'done':''}" data-id="${ex.id}" ${openId===ex.id?'open':''}><summary><span class="chk" aria-hidden="true"></span><span class="t"><h3>${esc(ex.song?"Daina: "+ex.songN:ex.n)}</h3>${ex.bpm?`<span class="pill">${ex.bpm} bpm</span>`:''}</span><span class="min">${ex.m} min</span></summary>
+     <div class="body"><p>${esc(ex.h)}</p>
+     <div class="timer"><span class="clock" data-clock="${ex.id}">${fmt(ex.m*60)}</span><button class="btn primary" data-start="${ex.id}">Pradėti</button><button class="btn small" data-reset="${ex.id}">Iš naujo</button></div><div class="bar"><i data-bar="${ex.id}"></i></div>
+     ${ex.kb?`<div class="drill">${kbSvg(ex.kb.n,ex.kb.f)}<span class="muted" style="font-size:.8rem">Skaičiai yra pirštai: 1 nykštys, 5 mažylis.</span></div>`:''}
+     ${ex.bass?`<div class="drill">${bassSvg(ex.bass)}</div>`:''}
+     ${ex.bel?`<div class="drill" data-akbox="bel:today">${belHtml(ex,"today")}</div>`:''}
+     ${ex.kn?`<div class="drill" data-akbox="kn:today">${knHtml("today")}</div>`:''}
+     ${ex.song&&ex.opts&&ex.opts.length>1?`<div class="row" style="justify-content:flex-start"><span class="eyebrow" style="align-self:center">Daina:</span>${ACC[A.phase].ex.find(e=>e.id===ex.id).opts.map((o,k)=>`<button class="btn small" data-aksong="${k}" ${tog(o.n===ex.songN)}>${esc(o.n)}</button>`).join('')}</div>`:''}
+     ${ex.ear?`<div class="row" style="justify-content:flex-start"><button class="btn small primary" data-eartr="${ex.ear}">Atidaryti klausos treniruoklį</button></div>`:''}
+     ${d&&ex.bpm&&!ex.bel?(rated.includes(accAdjKey(ex.id))?`<span class="muted" style="font-size:.85rem">Įvertinta šiandien. Tempas rytojui: ${ex.bpm} bpm.</span>`:`<div class="stack" style="gap:6px"><span class="eyebrow">Kaip sekėsi ${ex.bpm} bpm tempu?</span><div class="row" style="justify-content:flex-start"><button class="btn small" data-akrate="${ex.id}:5">Lengva: +5 bpm</button><button class="btn small" data-akrate="${ex.id}:0">Tinka</button><button class="btn small" data-akrate="${ex.id}:-5">Sunku: −5 bpm</button></div></div>`):''}
+     <div class="row" style="justify-content:flex-start">${ex.bpm?`<button class="btn small" data-mwt="1" aria-pressed="${S.metroWithTimer!==false}">Metronomas su laikmačiu: ${S.metroWithTimer!==false?'įjungtas':'išjungtas'}</button><button class="btn small" data-metro="${ex.bpm}">Atidaryti metronomą</button>`:''}<button class="btn small" data-toggle="${ex.id}">${d?'Pažymėti neatliktu':'Pažymėti atliktu'}</button></div>
+     </div></details>`;});
+  if(accCurEx().every(e=>dn.includes(e.id)))h+=`<div class="note"><b>Šiandienos sesija baigta.</b> Pratimuose su tempu įvertinkite, kaip sekėsi: programėlė pakoreguos tempą rytojui.</div>`;
+  v.innerHTML=h;paintTimer();}
+function accGoals(){const v=document.getElementById("v-goals");const A=A_();const p=ACC[A.phase];const g=accGoalsOk(A.phase);const all=g.every(Boolean);const last=A.phase===ACC.length-1;
+  let h=`<div class="head"><span class="eyebrow">Akordeonas · ${A.phase+1} etapo tikslai</span><h1>Ką turiu mokėti</h1><p class="muted">Dumplių ir natų tikslus matuoja mikrofonas. Kitus pažymite patys mygtuku „Pavyko šiandien“. Tikslas įskaitomas, kai jį įvykdote 3 skirtingas dienas. Pasiekus visus, programėlė pati pereina į kitą etapą.</p></div>`;
+  p.goals.forEach((t,i)=>{const st=accGoal(A.phase,i);h+=`<div class="goal ${st.ok?'ok':''}"><span class="gst" aria-hidden="true">${st.ok?'✓':'○'}</span><div class="stack" style="gap:6px;flex:1;min-width:0"><span>${esc(t.t)}</span><div class="gbar"><i style="width:${Math.round(100*Math.min(1,st.pct))}%"></i></div><small class="muted" style="font-size:.82rem">${esc(st.txt)}</small>${st.act?`<div class="row" style="justify-content:flex-start">${st.act}</div>`:''}</div></div>`;});
+  if(!last){if(all)h+=`<button class="btn primary" data-akgo="${A.phase+1}">Pereiti į ${A.phase+2} etapą: ${esc(ACC[A.phase+1].title)}</button>`;
+    else h+=accConfirm?`<div class="note confirm"><span>Tikrai pereiti, nors ne visi tikslai pasiekti?</span><button class="btn small primary" data-akgo="${A.phase+1}">Taip, pereiti</button><button class="btn small" data-akconf="0">Ne</button></div>`:`<button class="btn small" data-akconf="1" style="align-self:flex-start">Pereiti anksčiau</button>`;}
+  else if(all)h+=`<div class="note"><b>Visi akordeono etapai baigti!</b> Dabar galite akompanuoti dainoms ir mokytis jų iš klausos.</div>`;
+  h+='<h2 style="margin-top:12px">Visas kelias</h2><ul class="road">';
+  ACC.forEach((ph,i)=>{const ex=ph.ex.map(e=>`<li><b>${esc(e.n)}</b> · ${e.m} min${e.bpm?` · ${e.bpm} bpm`:''}</li>`).join('');const gl=ph.goals.map((t,k)=>`<li>${accGoal(i,k).ok?'✓ ':''}${esc(t.t)}</li>`).join('');
+    const act=i<A.phase?`<button class="btn small" data-akgo="${i}">Grįžti į šį etapą</button>`:'';
+    h+=`<li class="${i<A.phase?'past':i===A.phase?'cur':''}"><details class="roadd"><summary><span class="eyebrow">${i+1} etapas · ${i*2+1}–${i*2+2} savaitė${i===A.phase?' · dabar':''}</span><h3>${esc(ph.title)}</h3><p class="muted" style="font-size:.92rem">${esc(ph.focus)}</p></summary><div class="stack" style="gap:6px;padding-top:6px"><span class="eyebrow">Pratimai (kasdien)</span><ul class="tips">${ex}</ul><span class="eyebrow">Tikslai</span><ul class="tips">${gl}</ul>${act}</div></details></li>`;});
+  h+='</ul>';
+  h+=`<details class="other"><summary>Kaip treniruotis</summary><div class="theory" style="border:0;padding:12px 0 0">
+   <p><b>Kasdien ~30 min.</b> Jei tą pačią dieną grojate ir gitara, akordeonui pasirinkite trumpą dieną arba grokite pakaitomis.</p>
+   <p><b>Tempas keičiasi pagal jus.</b> Atlikę pratimą su tempu, įvertinkite: „Lengva“ pakelia 5 bpm, „Sunku“ nuleidžia 5 bpm.</p>
+   <p><b>Dumplių lygumas:</b> po 2 matavimų iš eilės nuo 8 balų judesys pailgėja (4 → 6 → 8 tvaksniai), po 2 iš eilės žemiau 5 sutrumpėja.</p>
+   <p><b>Planas</b> sudarytas pagal pradedančiųjų kursų seką (Palmer-Hughes, Hal Leonard, Bažilino savamokslis): dumplės ir C pozicija, C–G7–F bosai, valsas, minorai, F tonacija, registrai ir tremolo.</p></div></details>`;
+  h+=`<p class="muted" style="font-size:.75rem">Programėlės versija ${typeof APP_V!=="undefined"?APP_V:""}</p>`;
+  v.innerHTML=h;}
+function accTheory(){const v=document.getElementById("v-theory");const A=A_();const p=ACC[A.phase];
+  let h=instSwitch()+`<div class="head"><span class="eyebrow">Akordeonas · ${A.phase+1} etapo teorija</span><h1>${esc(p.title)}</h1></div><article class="theory">${p.theory}</article>`;
+  if(A.phase>0){h+='<h2 style="margin-top:8px">Ankstesni etapai</h2>';for(let i=A.phase-1;i>=0;i--)h+=`<details class="other"><summary>${i+1}. ${esc(ACC[i].title)}</summary><div class="theory" style="border:0;padding:12px 0 0">${ACC[i].theory}</div></details>`;}
+  h+=`<details class="other"><summary>Gitaros teorija (gamos, akordai, kvintų ratas)</summary><div class="theory" style="border:0;padding:12px 0 0">${PHASES.map((ph,i)=>`<h3>${i+1}. ${esc(ph.title)}</h3>${ph.theory}`).join('')}</div></details>`;
+  v.innerHTML=h;}
+function accEar(){const v=document.getElementById("v-ear");
+  v.innerHTML=instSwitch()+`<div class="head"><span class="eyebrow">Akordeonas</span><h1>Bosai ir klavišai</h1><p class="muted">Paspauskite bosų sagutę schemoje: pamatysite, kokias natas ji groja.</p></div>
+   <div class="drill" style="align-items:stretch">${accSettingsHtml()}</div>
+   <div class="drill">${bassSvg([],{full:true})}</div>
+   <div class="drill" data-akbox="kn:ear">${knHtml("ear")}</div>
+   <div class="drill" data-akbox="bel:ear">${belHtml({bpm:60},"ear")}</div>`;}
+function accNav(){const b=document.querySelector('nav.tabs button[data-v="ear"]');if(b){const tn=[...b.childNodes].filter(n=>n.nodeType===3).pop();if(tn)tn.textContent=accOn()?"Bosai":"Grifas";}}
+function accClick(t){const d=t.dataset;
+  if(d.inst){const to=d.inst==="acc"?"acc":"gtr";if((S.inst||"gtr")===to)return true;if(T.running)pauseT();releaseMic();akStop();T.id=null;S.inst=to==="acc"?"acc":null;if(to==="acc")accS();save();accNav();renderAll();toast(to==="acc"?"Akordeonas":"Gitara");return true;}
+  if(d.akbass){A_().bass=d.akbass;save();renderAll();toast(BASS_PRESETS[d.akbass].t);return true;}
+  if(d.akshort){const A=A_();A.shortDay=A.shortDay===todayStr()?null:todayStr();if(T.running)pauseT();T.id=null;save();renderToday();return true;}
+  if(d.aksong!=null){const A=A_();if(!A.song)A.song={};A.song[A.phase]=+d.aksong;if(T.running)pauseT();T.id=null;save();renderToday();return true;}
+  if(d.akrate){const [id,v]=d.akrate.split(":");accRate(id,+v);return true;}
+  if(d.akgoal){const [ph,i]=d.akgoal.split(":").map(Number);const A=A_();if(!A.gdays)A.gdays={};const k=ph+":"+i;const D=A.gdays[k]||(A.gdays[k]=[]);if(!D.includes(todayStr()))D.push(todayStr());save();renderGoals();accAuto();return true;}
+  if(d.akgo!=null){accGo(+d.akgo);show("today");return true;}
+  if(d.akconf!=null){accConfirm=d.akconf==="1";renderGoals();return true;}
+  if(d.akbel){AK.res=null;akStart("bel",d.akbel,+d.bpm||60);return true;}
+  if(d.akkn){AK.res=null;akStart("kn",d.akkn);return true;}
+  if(d.akstop){AK.round=null;akStop();return true;}
+  return false;}
+document.getElementById("app").addEventListener("click",e=>{const g=e.target.closest("[data-akb]");if(!g)return;const [col,row]=g.dataset.akb.split(":");
+  const box=g.closest(".drill")&&g.closest(".drill").querySelector(".ak-bassinfo");if(box)box.textContent=`${bassName(col,row)}${BROWS[row]&&row!=="B"&&row!=="T"?" ("+BROWS[row].toLowerCase()+")":""}: ${bassBtnNotes(col,row).join(" ")}`;});
+
+function renderAll(){accNav();renderToday();renderGoals();renderTheory();renderMetro();if(!P.round)renderEar();renderEarTrain();renderCal();}
 function render(){renderAll();}
-const APP_V="2026-11-21i";
+const APP_V="2026-11-21j";
 async function checkUpdate(){try{const r=await fetch(location.pathname+"?chk="+Date.now(),{cache:"no-store"});const t=await r.text();const m=t.match(/const APP_V="([^"]+)"/);
   if(m&&m[1]!==APP_V&&!document.getElementById("updBar")){const d=document.createElement("div");d.id="updBar";d.className="note";d.style.cssText="position:fixed;left:12px;right:12px;top:12px;z-index:50;display:flex;gap:10px;align-items:center;justify-content:space-between";
     d.innerHTML='<span>Yra nauja programėlės versija.</span><button class="btn small primary" id="updGo">Atnaujinti</button>';document.body.appendChild(d);
