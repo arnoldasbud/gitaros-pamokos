@@ -159,6 +159,7 @@ table.res{border-collapse:collapse;width:100%;font-size:.9rem}
 .calb small{font-family:var(--f-mono);font-size:.72rem;font-weight:500}
 .calb.okc{border-color:var(--done);color:var(--done)}
 .calb.warnc{border-color:var(--brass);color:var(--brass)}
+.btn.okc{border-color:var(--done);color:var(--done)}.btn.warnc{border-color:var(--brass);color:var(--brass)}
 .calb.live{background:var(--brass-soft)}
 .recs{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
 .recs summary{cursor:pointer;list-style:none}
@@ -397,16 +398,53 @@ function tick(){if(!T.running)return;const now=performance.now();const dt=(now-T
   paintTimer();}
 function paintTimer(){document.querySelectorAll("[data-clock]").forEach(el=>{const id=el.dataset.clock;const ex=curEx().find(e=>e.id===id);if(!ex)return;const tot=ex.m*60;const left=T.id===id?T.left:tot;el.textContent=fmt(left);el.classList.toggle("run",T.id===id&&T.running);const bar=document.querySelector('[data-bar="'+id+'"]');if(bar)bar.style.width=((1-left/tot)*100)+"%";const b=document.querySelector('[data-start="'+id+'"]');if(b)b.textContent=(T.id===id&&T.running)?"Pauzė":(T.id===id&&left<tot&&left>0?"Tęsti":"Pradėti");});}
 
-function curEx(){const all=PHASES[S.phase].ex;return S.shortDay===todayStr()?shortPlan(all):all;}
+function week2(){return practiceDay()>7;}
+function songIdx(){return ((S.songPick||{})[S.phase])||0;}
+function liveEx(e){if(e.song&&e.opts){const o=e.opts[Math.min(songIdx(),e.opts.length-1)];return Object.assign({},e,o);}
+  if(e.alt&&week2())return Object.assign({},e,e.alt,{wk2:true});return e;}
+function curEx(){const all=PHASES[S.phase].ex.map(liveEx);return S.shortDay===todayStr()?shortPlan(all):all;}
 /* trumpa diena (~10 min): apšilimas 1 min ir svarbiausi pratimai po 3 min */
 function shortPlan(all){const pick=[];const add=e=>{if(e&&!pick.includes(e))pick.push(e);};
   add(all.find(e=>e.id==="warm"));add(all.find(e=>e.song));add(all.find(e=>e.changes&&!e.song));add(all.find(e=>e.seq));add(all.find(e=>e.drill));
   if(pick.length<5)add(all.find(e=>e.eartr));if(pick.length<5)add(all.find(e=>e.review));
   return pick.slice(0,5).map(e=>Object.assign({},e,{m:e.id==="warm"?1:3,shortM:true}));}
+/* savaitės įrašas: dainos įrašas iki 60 s, saugomas šiame telefone (IndexedDB) */
+const REC={on:false,mr:null,chunks:[],t0:0,iv:null,list:null,urls:{}};
+function recDb(){return new Promise((ok,no)=>{const r=indexedDB.open("gitara-irasai",1);r.onupgradeneeded=()=>r.result.createObjectStore("recs",{keyPath:"id"});r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error);});}
+async function recLoad(){try{const db=await recDb();const L=await new Promise(ok=>{const q=db.transaction("recs").objectStore("recs").getAll();q.onsuccess=()=>ok(q.result||[]);q.onerror=()=>ok([]);});REC.list=L.sort((a,b)=>b.id-a.id);}catch(e){REC.list=[];}paintRec();}
+async function recSave(blob,dur){try{const db=await recDb();const ex=curEx().find(e=>e.song);await new Promise(ok=>{const t=db.transaction("recs","readwrite");t.objectStore("recs").put({id:Date.now(),d:todayStr(),ph:S.phase,song:ex?ex.n.replace(/^Daina: /,""):"",dur,blob});t.oncomplete=ok;t.onerror=ok;});}catch(e){toast("Nepavyko išsaugoti įrašo.");}
+  S.lastRec=todayStr();save();recLoad();}
+async function recDel(id){try{const db=await recDb();await new Promise(ok=>{const t=db.transaction("recs","readwrite");t.objectStore("recs").delete(id);t.oncomplete=ok;});}catch(e){}recLoad();}
+async function recToggle(){
+  if(REC.on){REC.mr&&REC.mr.state!=="inactive"&&REC.mr.stop();return;}
+  if(typeof MediaRecorder==="undefined"){toast("Ši naršyklė negali įrašinėti.");return;}
+  let st;try{st=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:true}});}catch(e){toast("Mikrofonas neleistas.");return;}
+  REC.chunks=[];REC.mr=new MediaRecorder(st);REC.mr.ondataavailable=e=>{if(e.data&&e.data.size)REC.chunks.push(e.data);};
+  REC.mr.onstop=()=>{st.getTracks().forEach(t=>t.stop());clearInterval(REC.iv);REC.on=false;const dur=Math.round((Date.now()-REC.t0)/1000);const b=new Blob(REC.chunks,{type:REC.mr.mimeType||"audio/webm"});if(dur>=3)recSave(b,dur);else paintRec();};
+  REC.mr.start();REC.on=true;REC.t0=Date.now();clearInterval(REC.iv);REC.iv=setInterval(()=>{if(Date.now()-REC.t0>=60000)REC.mr.stop();paintRec();},500);paintRec();}
+function recThisWeek(){return S.lastRec&&daysBetween(S.lastRec,todayStr())<7;}
+function recBoxHtml(){if(REC.list===null){recLoad();}
+  const L=(REC.list||[]).slice(0,4);
+  const items=L.map(r=>{if(!REC.urls[r.id])REC.urls[r.id]=URL.createObjectURL(r.blob);return `<li><span class="muted" style="font-size:.85rem">${r.d.slice(5)} · ${r.ph+1} etapas · ${esc(r.song)} · ${r.dur} s</span><audio controls preload="none" src="${REC.urls[r.id]}" style="width:100%"></audio><button class="btn small" data-recdel="${r.id}" style="align-self:flex-start">Ištrinti</button></li>`;}).join('');
+  return `<span class="eyebrow">Savaitės įrašas${recThisWeek()?' ✓':''}</span><span class="muted" style="font-size:.88rem">Kartą per savaitę įsirašykite, kaip grojate dainą (iki 1 min). Po kelių savaičių palyginkite. Įrašai lieka tik šiame telefone.</span>
+   <button class="btn ${REC.on?'primary':''}" id="recGo">${REC.on?`Sustabdyti (${Math.round((Date.now()-REC.t0)/1000)} s)`:'Įrašyti'}</button>${items?`<ul class="sumlist" style="width:100%">${items}</ul>`:''}`;}
+function paintRec(){document.querySelectorAll("[data-recbox]").forEach(b=>b.innerHTML=recBoxHtml());}
 /* kartojimo pratimas: silpniausios vietos iš klaidų suvestinės, kitaip – ankstesnio etapo pratimas pagal dieną */
-function reviewHtml(){const I=sumItems().slice(0,3);
+/* dienos klausimai: 2 per dieną iš šio ir ankstesnių etapų testų temų; temos, kuriose klystate, parenkamos dažniau */
+function dqTopics(){const T=[];for(let i=0;i<=S.phase;i++)(GD[i]||[]).forEach(g=>{if(g.k==="quiz")g.t.forEach(x=>{if(!T.includes(x))T.push(x);});});return T;}
+function dqToday(){const d=todayStr();if(S.dq&&S.dq.d===d&&S.dq.ph===S.phase)return S.dq;const st=S.qStat||{};const T=dqTopics();if(!T.length)return null;
+  const w=T.map(t=>{const x=st[t]||{n:0,w:0};return 1+(x.n?3*x.w/x.n:1)+(x.last&&daysBetween(x.last,d)>7?1:0);});
+  const pick=()=>{let r=Math.random()*w.reduce((a,b)=>a+b,0);for(let i=0;i<T.length;i++){r-=w[i];if(r<=0)return T[i];}return T[T.length-1];};
+  const qs=[];let g=0;while(qs.length<2&&g++<50){const q=QT[pick()].g();if(!qs.some(x=>x.q===q.q))qs.push(q);}
+  S.dq={d,ph:S.phase,qs,ans:qs.map(()=>null)};save();return S.dq;}
+function dqAnswer(v){const [i,k]=v.split(":").map(Number);const D=S.dq;if(!D||D.ans[i]!=null)return;D.ans[i]=k;const q=D.qs[i];const ok=q.opts[k]===q.a;
+  if(!S.qStat)S.qStat={};const x=S.qStat[q.topic]||{n:0,w:0};x.n++;if(!ok)x.w++;x.last=todayStr();if(x.n>20){x.n=Math.round(x.n/2);x.w=Math.round(x.w/2);}S.qStat[q.topic]=x;save();renderToday();}
+function dqHtml(){const D=dqToday();if(!D)return '';
+  return `<span class="eyebrow">Dienos klausimai</span>`+D.qs.map((q,i)=>{const A=D.ans[i];return `<div class="stack" style="gap:6px"><b>${esc(q.q)}</b><div class="row" style="justify-content:flex-start">${q.opts.map((o,k)=>`<button class="btn small ${A!=null?(o===q.a?'okc':k===A?'warnc':''):''}" data-dq="${i}:${k}" ${A!=null?'disabled':''}>${esc(o)}</button>`).join('')}</div>${A!=null?`<span class="heard ${q.opts[A]===q.a?'good':'bad'}">${q.opts[A]===q.a?'Teisingai.':'Teisinga: '+esc(q.a)+'.'} ${esc(q.ex)}</span>`:''}</div>`;}).join('');}
+function reviewHtml(){return dqHtml()+reviewWeak();}
+function reviewWeak(){const I=sumItems().slice(0,3);
   if(I.length)return `<span class="eyebrow">Šiandien pakartokite</span><ul class="sumlist">${I.map(r=>`<li><span class="eyebrow">${esc(r.k)}</span><span>${esc(r.t)}</span>${r.act?`<div class="row" style="justify-content:flex-start">${r.act}</div>`:''}</li>`).join('')}</ul>`;
-  const prev=S.phase>0?PHASES[S.phase-1].ex.filter(e=>e.id!=="warm"&&!e.drill&&!e.eartr&&!e.review):[];if(!prev.length)return '<span class="muted">Klaidų nerasta. Pakartokite bet kurį šios dienos pratimą lėčiau ir švariau.</span>';
+  if(S.phase===0)return '';const prev=S.phase>0?PHASES[S.phase-1].ex.filter(e=>e.id!=="warm"&&!e.drill&&!e.eartr&&!e.review):[];if(!prev.length)return '<span class="muted">Klaidų nerasta. Pakartokite bet kurį šios dienos pratimą lėčiau ir švariau.</span>';
   const e=prev[practiceDay()%prev.length];return `<span class="eyebrow">Klaidų nerasta. Pakartokite iš ${S.phase} etapo</span><b>${esc(e.n)}${e.bpm?` · ${e.seq?sqBpm(e.seq,e.bpm):e.bpm} bpm`:''}</b><span class="muted" style="font-size:.9rem">${esc(e.h)}</span>`;}
 function toast(m,ms){const t=document.getElementById("toast");t.textContent=m;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>{t.hidden=true;},ms||2600);}
 function lvlToast(m){toast(m,5000);}
@@ -425,6 +463,17 @@ function fretStrip(){
   for(let i=0;i<Math.max(14,cur+1);i++){const on=i<done.length;const inl=[2,4,6,8,11].includes(i);h+=`<span class="${on?'on ':''}${i===cur?'today ':''}${inl?'inlay':''}" title="${on?done[i]:''}"></span>`;}
   return h+'</div>';
 }
+/* savaitės suvestinė: kas pagerėjo per 7 dienas */
+function weekHtml(){const t=todayStr();const in7=d=>d&&daysBetween(d,t)<7;
+  const days=Object.keys(S.log||{}).filter(d=>in7(d)&&S.log[d]>=60).length;const mins=Math.round(Object.keys(S.log||{}).filter(in7).reduce((a,d)=>a+S.log[d],0)/60);
+  const out=[];const n=(a,f)=>(a||[]).filter(x=>in7(x.d)&&f(x)).length;
+  const ear=n(S.earHist,x=>x.up);if(ear)out.push(`klausos lygis pakilo ${ear} k.`);
+  const tup=n(S.rhHist,x=>x.lvl&&x.lvl.up)+n(S.sqHist,x=>x.lvl&&x.lvl.up);if(tup)out.push(`tempas pakilo ${tup} k. (po 5 bpm)`);
+  if(S.focus&&S.focus.auto&&in7(S.focus.since))out.push("nauja styga grifo natose");
+  const qz=n(S.quizHist,x=>x.score>=9);if(qz)out.push(`išlaikyta testų: ${qz}`);
+  const rc=(REC.list||[]).filter(r=>in7(r.d)).length;if(rc)out.push(`įrašų: ${rc}`);
+  let best=0,cur=0;Object.keys(S.log||{}).filter(d=>S.log[d]>=60).sort().forEach((d,i,a)=>{cur=i&&daysBetween(a[i-1],d)===1?cur+1:1;best=Math.max(best,cur);});
+  return `<div class="note" style="display:flex;flex-direction:column;gap:4px"><b>Ši savaitė: ${days} d. iš 7, ${mins} min</b><span style="font-size:.9rem">${out.length?"Pagerėjo: "+out.join(", ")+".":"Pagerėjimai atsiras čia, kai programėlė pakels lygį ar tempą."} Ilgiausia serija: ${best} d.</span>${S.phase>0&&!recThisWeek()?'<span style="font-size:.9rem">Šią savaitę dar neįrašėte dainos (pratime „Daina“).</span>':''}</div>`;}
 function statsHtml(){
   const plan=curEx().reduce((a,e)=>a+e.m,0);const g=phaseGoals().filter(Boolean).length;
   return `<div class="stats" id="stats"><div class="stat"><b>${Math.floor(secsToday()/60)}/${plan}</b><small>min šiandien</small></div><div class="stat"><b>${streak()}</b><small>dienų iš eilės</small></div><div class="stat"><b>${g}/${PHASES[S.phase].goals.length}</b><small>tikslų pasiekta</small></div></div>`;
@@ -434,11 +483,11 @@ function paintStats(){const el=document.getElementById("stats");if(el)el.outerHT
 function renderToday(){
   const v=document.getElementById("v-today");const dn=doneToday();const open=v.querySelector("details[open]");const openId=open?open.dataset.id:null;
   const sd=S.shortDay===todayStr();
-  let h=stageHeader()+`<button class="btn small" id="calOpen" style="align-self:flex-start">${calReady()?"Gitaros pritaikymas ✓":"Pritaikyti programėlę savo gitarai"}</button>`+fretStrip()+statsHtml()+recsHtml()+`<h2 style="margin-top:8px">Šiandienos pratimai${sd?' · trumpa diena':''}</h2><div class="row" style="justify-content:flex-start"><button class="btn small" id="shortDay" ${tog(sd)}>${sd?'Grįžti į visą programą':'Turiu tik 10 min: trumpa diena'}</button></div>${sd?'<span class="muted" style="font-size:.88rem">Apšilimas ir svarbiausi pratimai po 3 min. Rytoj vėl bus visa programa.</span>':''}`;
+  let h=stageHeader()+`<button class="btn small" id="calOpen" style="align-self:flex-start">${calReady()?"Gitaros pritaikymas ✓":"Pritaikyti programėlę savo gitarai"}</button>`+fretStrip()+statsHtml()+weekHtml()+recsHtml()+`<h2 style="margin-top:8px">Šiandienos pratimai${sd?' · trumpa diena':''}</h2><div class="row" style="justify-content:flex-start"><button class="btn small" id="shortDay" ${tog(sd)}>${sd?'Grįžti į visą programą':'Turiu tik 10 min: trumpa diena'}</button></div>${sd?'<span class="muted" style="font-size:.88rem">Apšilimas ir svarbiausi pratimai po 3 min. Rytoj vėl bus visa programa.</span>':''}`;
   curEx().forEach(ex=>{
     const d=dn.includes(ex.id);
     h+=`<details class="ex ${d?'done':''}" data-id="${ex.id}" ${openId===ex.id?'open':''}>
-      <summary><span class="chk" aria-hidden="true"></span><span class="t"><h3>${esc(ex.drill?focusTitle():ex.n)}</h3>${ex.bpm?`<span class="pill">${ex.seq?sqBpm(ex.seq,ex.bpm):ex.song?songCfg(ex.n,ex.bpm).rbpm:ex.bpm} bpm</span>`:''}</span><span class="min">${ex.m} min</span></summary>
+      <summary><span class="chk" aria-hidden="true"></span><span class="t"><h3>${esc(ex.drill?focusTitle():ex.lesson?"Dienos teorija: "+(lessonsOf(S.phase)[lessonIdx()]||{}).t:ex.n)}</h3>${ex.wk2?'<span class="pill">2 savaitės variantas</span>':''}${ex.bpm?`<span class="pill">${ex.seq?sqBpm(ex.seq,ex.bpm):ex.song?songCfg(ex.n,ex.bpm).rbpm:ex.bpm} bpm</span>`:''}</span><span class="min">${ex.m} min</span></summary>
       <div class="body"><p>${esc(ex.h)}</p>
         ${ex.eartr?earTodayHtml(ex):`<div class="timer"><span class="clock" data-clock="${ex.id}">${fmt(ex.m*60)}</span>
           <button class="btn primary" data-start="${ex.id}">Pradėti</button>
@@ -446,6 +495,9 @@ function renderToday(){
         <div class="bar"><i data-bar="${ex.id}"></i></div>`}
         ${ex.drill?`<div class="drill" id="drillBox">${drillHtml()}</div>`:''}
         ${ex.review?`<div class="drill" style="align-items:stretch">${reviewHtml()}</div>`:''}
+        ${ex.lesson?`<div class="drill" style="align-items:stretch">${lessonHtml()}</div>`:''}
+        ${ex.song&&ex.opts&&ex.opts.length>1?`<div class="row" style="justify-content:flex-start"><span class="eyebrow" style="align-self:center">Daina:</span>${ex.opts.map((o,k)=>`<button class="btn small" data-songpick="${k}" ${tog(k===Math.min(songIdx(),ex.opts.length-1))}>${esc(o.n.replace(/^Daina: /,""))}</button>`).join('')}</div>`:''}
+        ${ex.song?`<div class="drill" data-recbox>${recBoxHtml()}</div>`:''}
         ${ex.changes?`<div class="drill" data-chbox="${ex.id}">${chgHtml(ex)}</div>`:''}
         ${ex.seq?`<div class="drill" data-sqbox="${ex.seq}" data-sqbpm="${ex.bpm||60}">${sqHtml(ex.seq,ex.bpm)}</div>`:''}
         <div class="row" style="justify-content:flex-start">
@@ -578,6 +630,10 @@ document.getElementById("app").addEventListener("click",e=>{
   else if(t.id==="nextForce"){goPhase(S.phase+1);show("today");}
   else if(t.id==="prev"){goPhase(S.phase-1);}
   else if(t.id==="shortDay"){S.shortDay=S.shortDay===todayStr()?null:todayStr();if(T.running)pauseT();T.id=null;save();renderToday();}
+  else if(t.dataset.songpick!=null){if(!S.songPick)S.songPick={};S.songPick[S.phase]=+t.dataset.songpick;if(T.running)pauseT();T.id=null;save();renderToday();}
+  else if(t.dataset.dq!=null){dqAnswer(t.dataset.dq);}
+  else if(t.id==="recGo"){recToggle();}
+  else if(t.dataset.recdel){recDel(+t.dataset.recdel);}
   else if(t.dataset.gophase){goPhase(+t.dataset.gophase);show("today");}
   else if(t.dataset.ear){renderEar();show("ear");}
   else if(t.dataset.earsess){releaseMic();if(E.sess)endSess();E.mode=t.dataset.earsess;E.q=null;E.last=null;E.fromToday=t.dataset.exid;show("ear2");startSess(false);}
@@ -1913,25 +1969,55 @@ function goalsClick(t){
 const GV={sq:null,sc:false};
 PHASES.forEach(p=>p.ex.forEach(e=>{if(e.id==='chrom')e.seq='chrom';if(e.id==='scaleopen'||e.id==='scale')e.seq='cscale';if(e.id==='penta')e.seq='penta';if(e.id==='scale2')e.seq='gscale2';}));
 /* kiekvienam etapui nuo 2-ojo: daina pagal tos savaitės akordus. Programėlė tikrina ritmą ir akordų keitimus; žodžių ieškokite internete. */
+const ALT=[
+ {emam:{h:"2 savaitė: ritmas Ž Ž A Ž A (ant 3 ir 4 aštuntinės). Keisdami akordą nežiūrėkite į kairę ranką."},chrom:{h:"2 savaitė: pradėkite nuo 1 stygos ir leiskitės į 6, arba pirštų tvarka 1-3-2-4."}},
+ {cgd:{h:"2 savaitė: ritmas Ž – Ž A – A Ž A (populiariausias braukimas). Keitimai G ↔ C, C ↔ D, G ↔ D."},prog1:{h:"2 savaitė: Em – C – G – D. Tie patys akordai, kita pradžia, kita nuotaika.",changes:[["Em","C","G","D"]]},scale1:{h:"2 savaitė: G majoras 3 styga nuo atviros stygos (G) iki 12 sk., pagal T T P T T T P."}},
+ {pop:{h:"2 savaitė: tas pats I–V–vi–IV, bet su duslinimu (čk) ant 2 ir 4. Pabandykite D tonacijoje: D–A–Bm–G (Bm kol kas be barės, tik 4 plonosios stygos)."},intv:{h:"2 savaitė: intervalai nuo 5 stygos. Kvinta: +2 sk. 4 stygoje, oktava: +2 sk. 3 stygoje."}},
+ {blues:{h:"2 savaitė: bliuzas E tonacijoje: E5/E6 nuo 6 st., A5/A6 nuo 5 st., B5/B6 nuo 5 st. 2 sk. Ritmas shuffle."},impro:{h:"2 savaitė: improvizuokite antroje pentatonikos dėžutėje (7–10 sk.) ir sujunkite ją su pirmąja."}},
+ {move:{h:"2 savaitė: A formos barė: Bm – C#m – Dm – Em (2, 4, 5, 7 sk.). Prieš kiekvieną pasakykite šaknį."},sev:{h:"2 savaitė: A7 → D, B7 → Em, C → C7 → F. Klausykite, kaip 7 traukia į kitą akordą."}},
+ {transp:{h:"2 savaitė: transponuokite su kapodastru: grokite tomis pačiomis formomis, bet su kapodastru 2 ir 3 sk. Kokios tonacijos gaunasi?"},rhythm:{h:"2 savaitė: sinkopė Ž – Ž A – A Ž A ir šešioliktinės 50 bpm su duslinimu."}}];
+const SONGS2=[null,
+ {n:"Daina: Stand By Me (Ben E. King)",bpm:60,seq:["G","G","Em","Em","C","D","G","G"],h:"I–vi–IV–V G tonacijoje: G (2 taktai) – Em (2) – C – D – G (2). Bosas labai svarbus: ant 1 tvaksnio užgaukite akordo žemiausią stygą."},
+ {n:"Daina: No Woman, No Cry (Bob Marley)",bpm:66,seq:["C","G","Am","F"],h:"C – G – Am – F visą dainą. Regio ritmas: braukite aukštyn tik ant „ir“ (tarp tvaksnių), trumpai ir sausai."},
+ {n:"Daina: Zombie (The Cranberries)",bpm:70,seq:["Em","C","G","D"],h:"Em – C – G – D (po taktą). Virš šios progresijos puikiai tinka Em pentatonika (tos pačios natos kaip G majore)."},
+ {n:"Daina: House of the Rising Sun (The Animals)",bpm:60,seq:["Am","C","D","F","Am","C","E","E"],h:"Am – C – D – F – Am – C – E – E. Originalas 6/8: pirštais arba braukimu 1-2-3 4-5-6. F čia barė."},
+ {n:"Daina: Wish You Were Here (Pink Floyd)",bpm:60,seq:["C","D","Am","G","D","C","Am","G"],h:"Posmas: C – D – Am – G – D – C – Am – G. Užsirašykite laipsniais G tonacijoje ir transponuokite į D."}];
 const SONGS=[null,
  {n:"Daina: Knockin' on Heaven's Door (Bob Dylan)",bpm:66,seq:["G","D","Am","Am","G","D","C","C"],h:"Visa daina sukasi ant dviejų eilučių: G – D – Am (2 taktai) ir G – D – C (2 taktai). Po 4 smūgius kiekvienam taktui. Pirmiausia grokite be dainavimo, tada niūniuokite melodiją."},
  {n:"Daina: Let It Be (The Beatles)",bpm:70,seq:["C","G","Am","F","C","G","F","C"],h:"Posmas: C – G – Am – F, C – G – F – C. Tai ta pati I–V–vi–IV šeima. Ritmas Ž Ž A A Ž A arba paprasti 4 smūgiai žemyn."},
  {n:"Daina: Sweet Home Chicago (bliuzas A)",bpm:80,seq:["A","A","A","A","D","D","A","A","E","D","A","E"],h:"Klasikinis 12 taktų bliuzas A tonacijoje: A A A A | D D A A | E D A E. Kai pavyks su atvirais akordais, grokite galios akordais su „shuffle“ judesiu."},
  {n:"Daina: Creep (Radiohead)",bpm:60,seq:["G","B","C","Cm"],h:"G – B – C – Cm, po taktą kiekvienam. B ir Cm yra barė akordai (A forma, 2 ir 3 skersinė). Puiki barė treniruotė lėtu tempu."},
  {n:"Daina: Hallelujah (Leonard Cohen)",bpm:60,seq:["C","Am","C","Am","F","G","C","G"],h:"Posmas C dur: C – Am – C – Am – F – G – C – G. Originalas yra 6/8, bet pradėkite po 4 smūgius taktui. Paskui transponuokite į G (G – Em – G – Em – C – D – G – D)."}];
+/* trūkstami teorijos laipteliai ir nuoseklus ritmo kelias */
+PHASES[0].theory+=`<h3>Tabulatūra</h3><p>Tabulatūra (TAB) yra 6 linijos, viena kiekvienai stygai. <b>Viršutinė linija yra plonoji 1 styga</b>, apatinė storoji 6. Skaičius rodo skersinę, 0 reiškia atvirą stygą. Skaičiai vienas po kito grojami paeiliui, vienas virš kito kartu.</p><p class="k" style="font-family:var(--f-mono);white-space:pre;line-height:1.3">e|-----------0-1-3-|\nB|-----0-1-3-------|\nG|-0-2-----------|</p><p>Taip užrašomi pratimai ir melodijos internete. Akordų lentelėje (diagramoje) stygos stovi vertikaliai, o taškai rodo, kur dėti pirštus.</p>`;
+PHASES[1].theory+=`<h3>Pauzė</h3><p>Pauzė yra tyla, kuri trunka tiek pat, kiek nata. Ketvirtinės pauzės metu ranka toliau juda, tik nepaliečia stygų. Taip ritmas nesugriūva, o grojimas „kvėpuoja“.</p>`;
+PHASES[3].theory=`<h3>Natūralusis minoras</h3><p>Minorinė gama turi savo formulę: <span class="k">T P T T P T T</span>. Nuo A gaunasi A B C D E F G, tos pačios natos kaip C majore, tik pradedama nuo kitos vietos.</p>${scaleRow(["A","B","C","D","E","F","G"])}<p>Išmetus 2 ir 6 laipsnius (B ir F) lieka pentatonika. Todėl pentatonika yra supaprastintas minoras.</p>`+PHASES[3].theory+`<h3>Ritmas: shuffle</h3><p>Bliuze tvaksnis dalijamas į 3 dalis, o grojama pirma ir trečia: <span class="k">ilgas-trumpas, ilgas-trumpas</span> („da-ba, da-ba“). Tai vadinama shuffle arba svingu.</p>`;
+PHASES[4].theory=PHASES[4].theory.replace('<h3>Septakordai</h3>',`<h3>V → I trauka</h3><p>V laipsnio akordas (C majore G) skamba „neišspręstai“ ir traukia atgal į I (C). Šis judesys vadinamas <b>kadencija</b>, juo baigiasi dauguma dainų. Pridėjus septintą natą (G7), trauka dar stipresnė: F nata nori nusileisti į E, o B pakilti į C.</p><h3>Septakordai</h3>`)+`<h3>Ritmas: sinkopė ir duslinimas</h3><p><b>Sinkopė</b> yra kirtis ne ant tvaksnio, o tarp jų: <span class="k">1 ir (2) ir 3 ir 4 ir</span>, kai ant 2 ranka praleidžia stygas. <b>Duslinimas</b> (chuck): ant 2 ir 4 delnu prislopinkite stygas ir braukite, kad gautųsi trumpas „čk“ garsas, tarsi būgnelis.</p>`;
+PHASES[5].theory+=`<h3>Ritmas: šešioliktinės</h3><p>Šešioliktinės: 4 smūgiai vienam tvaksniui, skaičiuojama <span class="k">1 e ir a 2 e ir a</span>. Ranka juda žemyn-aukštyn dvigubai greičiau, bet stygas paliečia ne visada. Pradėkite lėtai, 50–60 bpm.</p>`;
+/* teorija mažomis dienos pamokomis: kiekvienas <h3> skyrius yra viena pamoka su užduotimi ant gitaros */
+const TRY={"1:Ritmas":"Akordų pratime braukite aštuntinėmis: žemyn ant skaičių, aukštyn ant „ir“, garsiai skaičiuodami 1 ir 2 ir.","2:Ritmas":"Ant G–C braukite Ž Ž A A Ž A ir skaičiuokite 1 2 ir (3) ir 4 ir. Ant 3 ranka juda, bet stygų neliečia.","12 natų":"Sugrokite 6 stygoje natas nuo 0 iki 12 skersinės ir garsiai sakykite jų vardus. Kur nėra diezo?","Gitaroje":"Raskite A natą 6 stygoje (5 sk.) ir 5 stygoje (atvira). Palyginkite: tai ta pati nata.","Ritmas":"Įjunkite metronomą 60 bpm ir 1 minutę braukite po vieną kartą ant kiekvieno tvaksnio, garsiai skaičiuodami.","Kaip įsiminti natas":"Šiandien natų pratime pirmiausia raskite orientyrus: atvira styga, 5, 7 ir 12 skersinė.","Tabulatūra":"Sugrokite TAB pavyzdį iš šios pamokos. Kokia tai gama?","Gama yra formulė":"Pagal T T P T T T P sugrokite majoro gamą viena styga nuo bet kurios natos.","Laipsniai":"C majoro gamoje sugrokite tik 1, 3 ir 5 laipsnius. Ką girdite? Tai C akordas.","Pauzė":"Akordų pratime braukite ant 1, 2 ir 3, o ant 4 ranka praeina pro šalį neliesdama stygų.","Intervalai":"Nuo 6 st. 3 sk. (G) sugrokite didžiąją terciją (7 sk.) ir mažąją (6 sk.). Kuri šviesesnė?","Trigarsis = 1, 3, 5":"Paspauskite C akordą ir sugrokite stygas po vieną. Kurios natos yra C, E ir G?","Tonacijos akordai":"Sugrokite C, Dm, Em, F, G, Am vieną po kito: tai visi C tonacijos akordai.","Natūralusis minoras":"Sugrokite A minorą 5 stygoje nuo atviros stygos pagal T P T T P T T.","Minorinė pentatonika":"Šiandien pentatonikos pratime pradėkite ir baikite ant A natos. Ji yra „namai“.","Paralelinės tonacijos":"Sugrokite C–G–Am–F, tada Am–F–C–G. Tos pačios natos, kita nuotaika.","Kvintų ratas":"Raskite gitaroje kvintų ratą: C → G → D → A → E, kiekviena nata 5 stygoje kvinta aukščiau (2 skersinės aukščiau ir viena styga žemyn).","12 taktų bliuzas":"Grokite bliuzą ir garsiai skaičiuokite taktus nuo 1 iki 12.","Ritmas: shuffle":"Bliuzo pratime grokite „da-ba, da-ba“ ritmu. Įsivaizduokite žingsniuojantį žmogų.","Barė":"Paspauskite F barę ir sugrokite stygas po vieną. Kuri neskamba? Patraukite alkūnę arčiau kūno.","V → I trauka":"Sugrokite C–F–G ir sustokite ant G. Jaučiate, kaip norisi grįžti į C? Tada sugrokite G7 → C.","Septakordai":"Sugrokite C, tada Cmaj7, tada C7. Kaip keičiasi nuotaika?","Ritmas: sinkopė ir duslinimas":"Ant bet kurių akordų: Ž (1), čk (2), Ž A (3 ir), čk (4).","Transpozicija":"Užsirašykite šio etapo dainos akordus laipsniais (I, V, vi...).","Kapodastras":"Uždėkite kapodastrą (arba barę) ant 2 sk. ir grokite G formą. Kokia tai tonacija?","Klausa":"Paleiskite mėgstamą dainą ir pabandykite rasti boso natą 6 ar 5 stygoje.","Akordeonui":"Prisiminkite, ką žinote apie C tonaciją, ir įsivaizduokite tas natas klaviatūroje.","Ritmas: šešioliktinės":"Metronomas 50 bpm: šešioliktinėmis sausai braukite per prislopintas stygas, skaičiuodami „1 e ir a“."};
+function lessonsOf(i){const parts=PHASES[i].theory.split(/(?=<h3>)/).map(x=>x.trim()).filter(x=>x.startsWith("<h3>"));
+  const tail=PHASES[i].theory.split(/(?=<h3>)/)[0];return parts.map(x=>{const t=(x.match(/<h3>(.*?)<\/h3>/)||[])[1]||"";return {t,html:x,tryIt:TRY[i+":"+t]||TRY[t]||""};});}
+function lessonIdx(){const L=lessonsOf(S.phase);return (practiceDay()-1)%L.length;}
+function lessonHtml(){const L=lessonsOf(S.phase);const i=lessonIdx();const l=L[i];
+  return `<span class="eyebrow">Pamoka ${i+1} iš ${L.length}${practiceDay()>L.length?' · kartojimas':''}</span><div class="theory" style="border:0;padding:0">${l.html}</div>${l.tryIt?`<div class="note"><b>Išbandykite ant gitaros:</b> ${esc(l.tryIt)}</div>`:''}<span class="muted" style="font-size:.85rem">Visa etapo teorija ir testai yra skiltyje „Teorija“.</span>`;}
 PHASES.forEach((p,i)=>{
+  p.ex.unshift({id:"lesson",n:"Dienos teorija",m:2,lesson:true,h:"Viena trumpa pamoka ir užduotis ant gitaros. Kasdien vis kita etapo tema."});
   if(i>0){const w=p.ex.findIndex(e=>e.id==="warm");p.ex.splice(w+1,0,{id:"notesd",n:"Grifo natos",m:3,drill:true,h:"Kasdien 3 min natų: tęsiama nuo ten, kur baigėte. Po 3 gerų dienų programėlė pati pereina prie kitos stygos, kol išmoksite visas. Barė akordams 5 etape tai būtina."});}
-  const S2=SONGS[i];if(S2){const k=p.ex.findIndex(e=>e.eartr);p.ex.splice(k<0?p.ex.length:k,0,{id:"song",n:S2.n,m:5,bpm:S2.bpm,song:true,changes:[S2.seq],h:S2.h+" Žodžių ieškokite internete. Programėlė tikrina, ar braukimai laiku ir ar laiku pakeičiate akordą."});}
+  const S2=SONGS[i];if(S2){const k=p.ex.findIndex(e=>e.eartr);const mk=x=>({n:x.n,bpm:x.bpm,changes:[x.seq],h:x.h+" Žodžių ieškokite internete. Programėlė tikrina, ar braukimai laiku ir ar laiku pakeičiate akordą."});
+    p.ex.splice(k<0?p.ex.length:k,0,Object.assign({id:"song",m:5,song:true,opts:[mk(S2)].concat(SONGS2[i]?[mk(SONGS2[i])]:[])},mk(S2)));}
   /* kad pilna diena tilptų į ~30 min, kai kurie pratimai sutrumpinti */
-  const MIN=[null,{scale1:2,scaleopen:3,cgd:4,prog1:3,eartr:3},{intv:3,chordnotes:2,pop:4,eartr:3},{penta:4,blues:4,impro:4,review:2,eartr:3},{fbarre:4,move:3,sev:3,eartr:3},{ear:5,scale2:3,rhythm:3,eartr:3}][i];
+  const MIN=[{warm:1,notes65:3},{warm:1,scale1:2,scaleopen:3,cgd:3,prog1:3,eartr:3},{warm:1,intv:3,chordnotes:2,pop:3,eartr:3},{warm:1,penta:4,blues:3,impro:4,review:2,eartr:3},{warm:2,fbarre:4,move:3,sev:2,eartr:3},{warm:1,ear:4,scale2:3,rhythm:3,eartr:3}][i];
   if(MIN)p.ex.forEach(e=>{if(MIN[e.id])e.m=MIN[e.id];});
-  if(i>0)p.ex.push({id:"rev",n:"Kartojimas: silpnos vietos",m:3,review:true,h:"Programėlė parenka vietas, kuriose dažniausiai klystate. Jei klaidų nėra, pakartokite ankstesnio etapo pratimą."});
+  p.ex.push({id:"rev",n:"Kartojimas: dienos klausimai ir silpnos vietos",m:3,review:true,h:"2 teorijos klausimai iš šio ir ankstesnių etapų (klaidingi kartojami dažniau) ir vietos, kuriose dažniausiai klystate."});
+  /* antros savaitės variantai, kad nebūtų nuobodu */
+  const A=ALT[i]||{};p.ex.forEach(e=>{if(A[e.id])e.alt=A[e.id];});
 });
 
 
 function renderAll(){renderToday();renderGoals();renderTheory();renderMetro();if(!P.round)renderEar();renderEarTrain();renderCal();}
 function render(){renderAll();}
-const APP_V="2026-11-21f";
+const APP_V="2026-11-21g";
 async function checkUpdate(){try{const r=await fetch(location.pathname+"?chk="+Date.now(),{cache:"no-store"});const t=await r.text();const m=t.match(/const APP_V="([^"]+)"/);
   if(m&&m[1]!==APP_V&&!document.getElementById("updBar")){const d=document.createElement("div");d.id="updBar";d.className="note";d.style.cssText="position:fixed;left:12px;right:12px;top:12px;z-index:50;display:flex;gap:10px;align-items:center;justify-content:space-between";
     d.innerHTML='<span>Yra nauja programėlės versija.</span><button class="btn small primary" id="updGo">Atnaujinti</button>';document.body.appendChild(d);
