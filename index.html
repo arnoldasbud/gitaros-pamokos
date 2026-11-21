@@ -1100,18 +1100,41 @@ async function startRhythm(ex){
   const ok=await micOn();if(!RM.active){if(ok)micOff();return;}
   if(!ok){RM.active=false;toast("Ritmo analizei reikia mikrofono.");paintChg();return;}
   const a=AC;const lp1=a.createBiquadFilter(),lp2=a.createBiquadFilter();lp1.type=lp2.type="lowpass";lp1.frequency.value=lp2.frequency.value=900;
-  P.anLow=a.createAnalyser();P.anLow.fftSize=512;P.src.connect(lp1);lp1.connect(lp2);lp2.connect(P.anLow);P.lbuf=new Float32Array(512);
+  P.anLow=a.createAnalyser();P.anLow.fftSize=512;P.src.connect(lp1);lp1.connect(lp2);lp2.connect(P.anLow);P.lbuf=new Float32Array(512);onInit(a,lp2,RM);
   P.an2=a.createAnalyser();P.an2.fftSize=8192;P.an2.smoothingTimeConstant=0;P.src.connect(P.an2);P.fbuf=new Float32Array(P.an2.frequencyBinCount);
   // metronomo spragsėjimo girdėjimas per mikrofoną: išmatuojame telefono garso vėlavimą
   const hp1=a.createBiquadFilter(),hp2=a.createBiquadFilter();hp1.type=hp2.type="highpass";hp1.frequency.value=hp2.frequency.value=2400;P.anHi=a.createAnalyser();P.anHi.fftSize=2048;P.src.connect(hp1);hp1.connect(hp2);hp2.connect(P.anHi);P.hbuf=new Float32Array(2048);
   RM.beat=-4;RM.nextT=a.currentTime+0.25;RM.start=RM.nextT+4*rmBeatDur();clearInterval(RM.iv);vizStop(RM);busOn(RM);RM.iv=setInterval(rmSched,25);paintChg();
 }
+/* užgavimo (garso pradžios) paieška, bendra akordų ritmui ir natų sekoms.
+   Energija skaičiuojama 43 ms lange kas 1,3 ms ir lyginama su žemiausiu lygiu 25–80 ms prieš tai,
+   todėl naujas braukimas aptinkamas ir tada, kai ankstesnis akordas dar skamba. Laikas atsekamas iki kilimo pradžios,
+   ne iki momento, kai garsas peržengė slenkstį: braukimas per 6 stygas trunka 20–70 ms, o seniau buvo matuojama jo vidurys ar pabaiga. */
+const ON_B=64,ON_W=2048,ON_N=8192,ON_BACK=60,ON_GAP=20;
+function onInit(a,node,st){P.anOn=a.createAnalyser();P.anOn.fftSize=ON_N;node.connect(P.anOn);P.obuf=new Float32Array(ON_N);P.ocs=new Float64Array(ON_N+1);st.oE={};st.oLast=0;st.oOn=-9;}
+function onScan(st,ratio,minA,refr,detect){
+  const a=AC,an=P.anOn;if(!an)return null;const sr=a.sampleRate;an.getFloatTimeDomainData(P.obuf);
+  const end=Math.round(a.currentTime*sr),beg=end-ON_N,c=P.ocs;c[0]=0;for(let i=0;i<ON_N;i++)c[i+1]=c[i]+P.obuf[i]*P.obuf[i];
+  const E=st.oE,b0=Math.ceil((beg+ON_W)/ON_B),b1=Math.floor(end/ON_B);
+  for(let b=b0;b<=b1;b++)if(E[b]==null){const hi=b*ON_B-beg;E[b]=Math.sqrt(Math.max(0,c[hi]-c[hi-ON_W])/ON_W);}
+  for(const k in E)if(+k<b0-ON_BACK-4)delete E[k];
+  if(!detect)return null;
+  let found=null;
+  for(let b=Math.max(st.oLast+1,b0-ON_BACK);b<=b1;b++){st.oLast=b;
+    if(E[b]==null||E[b-1]==null||E[b-ON_BACK]==null)continue;const bt=b*ON_B/sr;if(bt-st.oOn<refr)continue;
+    let ref=Infinity;for(let k=b-ON_BACK;k<=b-ON_GAP;k++)if(E[k]!=null&&E[k]<ref)ref=E[k];
+    const cur=(E[b]+E[b-1])/2;
+    if(cur>minA&&cur>ref*ratio){let j=b;while(j>b-ON_BACK&&E[j-1]!=null&&E[j-1]>ref*1.08)j--;st.oOn=bt;found=j*ON_B/sr-(a.baseLatency||0);break;}
+  }
+  return found;
+}
 function rhythmFrame(){
   const a=AC;P.anLow.getFloatTimeDomainData(P.lbuf);let rms=0;for(let i=0;i<512;i++)rms+=P.lbuf[i]*P.lbuf[i];rms=Math.sqrt(rms/512);
   const fl=RM.floor;fl.push(rms);if(fl.length>6)fl.shift();const floor=Math.min(...fl);const t=a.currentTime;
   if(P.anHi&&t<RM.start)rmHearClick(t);
+  const on=onScan(RM,1.3,Math.max(0.01,((S.cal&&S.cal.noiseLow)||0)*3),0.18,!RM.pend);
   if(RM.pend){const p=RM.pend;if(rms>p.peak){p.peak=rms;p.peakT=t;}if(t>=p.t0+0.3){RM.pend=null;finishStrum(p);}return;}
-  if(rms>Math.max(0.01,((S.cal&&S.cal.noiseLow)||0)*3)&&rms>floor*2.5&&t-RM.lastOn>0.18){RM.lastOn=t;RM.pend={t:t-0.006-(a.baseLatency||0),t0:t,peak:rms,peakT:t};}
+  if(on!=null){RM.lastOn=t;RM.pend={t:on,t0:t,peak:rms,peakT:t};}
 }
 function rmHearClick(t){hearClk(RM,t,rmBeatDur());}
 function rmLatency(){latFinish(RM);}
@@ -1130,7 +1153,7 @@ function finishStrum(p){
 function ltPl(n,a,b,c){const d=n%10,h=n%100;if(d===1&&h!==11)return a;if(d>=2&&d<=9&&!(h>=11&&h<=19))return b;return c;}
 function median(a){if(!a.length)return 0;const b=a.slice().sort((x,y)=>x-y);const m=b.length>>1;return b.length%2?b[m]:(b[m-1]+b[m])/2;}
 function endRhythm(){
-  if(!RM.active)return;RM.active=false;clearInterval(RM.iv);vizStop(RM);busOff(RM);micOff();P.an2=null;P.anLow=null;P.anHi=null;
+  if(!RM.active)return;RM.active=false;clearInterval(RM.iv);vizStop(RM);busOff(RM);micOff();P.an2=null;P.anLow=null;P.anOn=null;P.anHi=null;
   const S0=RM.strums.filter(s=>!s.extra);const lastBeat=S0.length?Math.max(...S0.map(s=>s.k)):0;
   if(S0.length>=6){
     const normal=S0.filter(s=>!s.change);const changes=S0.filter(s=>s.change);
@@ -1258,7 +1281,7 @@ function calLatFrame(){const L=CAL.lst;const t=AC.currentTime;if(!L||!P.anHi)ret
   if(t>L.start+10*L.bd+0.7){const c=L.clk;let v=null;if(c.length>=4){const md=median(c);const good=c.filter(x=>Math.abs(x-md)<0.02);if(good.length>=4)v=median(good);}
     calStop();if(v!=null){S.latCal={v,d:todayStr()};S.rmLat=v;save();CAL.msg=`Telefono vėlavimas ${Math.round(v*1000)} ms. Jis bus atimamas visuose ritmo pratimuose.`;}
     else CAL.msg="Nepavyko aiškiai išgirsti spragtelėjimų. Padidinkite garsą, nenaudokite ausinių, kambaryje turi būti tylu, ir pakartokite.";renderCal();}}
-function calStop(){CAL.tok=(CAL.tok||0)+1;busOff(CAL);CAL.active=false;CAL.step=null;CAL.target=null;micOff();P.an2=null;P.anLow=null;P.anHi=null;}
+function calStop(){CAL.tok=(CAL.tok||0)+1;busOff(CAL);CAL.active=false;CAL.step=null;CAL.target=null;micOff();P.an2=null;P.anLow=null;P.anOn=null;P.anHi=null;}
 function calFrame(){
   if(CAL.step==="lat"){calLatFrame();return;}
   if(!P.anLow)return;const now=performance.now();const low=lowRms();
@@ -1668,7 +1691,7 @@ async function startSeq(id,bpm,loopSecs){
   Object.assign(SQ,{active:true,id,bpm,sub:SEQS[id].sub,N:base.length,loop:!!loopSecs,list:[].concat(...Array(reps).fill(base)),clk:[],lastClk:0,lat:S.rmLat||0,latDone:false,latOk:false,drift:0,offs:[],peaks:[],prevGot:null,floor:[],lastOn:0,pend:null,res:[],last:null,result:null,curSlot:-1});
   paintSQ();const ok=await micOn();if(!SQ.active){if(ok)micOff();return;}
   if(!ok){SQ.active=false;paintSQ();return;}
-  const a=AC;const lp1=a.createBiquadFilter(),lp2=a.createBiquadFilter();lp1.type=lp2.type="lowpass";lp1.frequency.value=lp2.frequency.value=900;P.anLow=a.createAnalyser();P.anLow.fftSize=512;P.src.connect(lp1);lp1.connect(lp2);lp2.connect(P.anLow);P.lbuf=new Float32Array(512);
+  const a=AC;const lp1=a.createBiquadFilter(),lp2=a.createBiquadFilter();lp1.type=lp2.type="lowpass";lp1.frequency.value=lp2.frequency.value=900;P.anLow=a.createAnalyser();P.anLow.fftSize=512;P.src.connect(lp1);lp1.connect(lp2);lp2.connect(P.anLow);P.lbuf=new Float32Array(512);onInit(a,lp2,SQ);
   const hp1=a.createBiquadFilter(),hp2=a.createBiquadFilter();hp1.type=hp2.type="highpass";hp1.frequency.value=hp2.frequency.value=2400;P.anHi=a.createAnalyser();P.anHi.fftSize=2048;P.src.connect(hp1);hp1.connect(hp2);hp2.connect(P.anHi);P.hbuf=new Float32Array(2048);
   const bd=60/SQ.bpm;SQ.beat=-4;SQ.nextT=a.currentTime+0.25;SQ.start=SQ.nextT+4*bd;clearInterval(SQ.iv);busOn(SQ);SQ.iv=setInterval(sqSched,25);paintSQ();
   const vis=[...document.querySelectorAll("[data-sqbox]")].find(b=>b.offsetParent);if(vis)try{vis.scrollIntoView({behavior:"smooth",block:"center"});}catch(e){}
@@ -1703,9 +1726,10 @@ function sqFrame(){
   latFinish(SQ);
   P.anLow.getFloatTimeDomainData(P.lbuf);let rms=0;for(let i=0;i<512;i++)rms+=P.lbuf[i]*P.lbuf[i];rms=Math.sqrt(rms/512);
   const fl=SQ.floor;fl.push(rms);if(fl.length>6)fl.shift();const floor=Math.min(...fl);const sd=sqSlot();
+  const on=onScan(SQ,1.5,Math.max(0.006,((S.cal&&S.cal.noiseLow)||0)*3),Math.min(0.15,sd*0.45),!SQ.pend);
   if(SQ.pend){const p=SQ.pend;if(rms>p.peak)p.peak=rms;P.an.getFloatTimeDomainData(P.buf);const f=detectPitch(P.buf,a.sampleRate);if(f>0&&t>p.t+0.03)p.det.push(Math.round(12*Math.log2(f/440)+69));
     if(t>=p.t+Math.min(0.2,sd*0.7)){SQ.pend=null;sqNote(p);}return;}
-  if(rms>Math.max(0.006,((S.cal&&S.cal.noiseLow)||0)*3)&&rms>floor*2.2&&t-SQ.lastOn>Math.min(0.15,sd*0.45)){SQ.lastOn=t;SQ.pend={t:t-0.006-(a.baseLatency||0),det:[],peak:rms};}
+  if(on!=null){SQ.lastOn=t;SQ.pend={t:on,det:[],peak:rms};}
 }
 function sqNote(p){
   /* drift: asmeninis/likęs vėlavimas, išmatuotas iš paskutinių teisingų natų; jis atimamas prieš priskiriant natą tvaksniui */
@@ -1728,7 +1752,7 @@ function sqNote(p){
   paintSQLive();
 }
 function endSeq(){
-  if(!SQ.active)return;SQ.active=false;clearInterval(SQ.iv);busOff(SQ);micOff();P.anLow=null;P.anHi=null;
+  if(!SQ.active)return;SQ.active=false;clearInterval(SQ.iv);busOff(SQ);micOff();P.anLow=null;P.anOn=null;P.anHi=null;
   const sdE=sqSlot();const el=Math.max(0,Math.min(SQ.list.length,Math.floor((AC.currentTime-SQ.lat-SQ.start)/sdE+0.5)));if(el<SQ.list.length){SQ.list=SQ.list.slice(0,el);SQ.res=SQ.res.slice(0,el);}
   const n=SQ.list.length;const R=SQ.res;const heard=R.filter(Boolean);
   if(!n||heard.length<n*0.3){SQ.result={empty:true};paintSQ();return;}
@@ -1754,7 +1778,7 @@ function sqAuto(r){
   if(r.bpm>=L&&sqGood(r))r.hint=`Dar ${need-g} ${ltPl(need-g,"toks bandymas","tokie bandymai","tokių bandymų")} ${r.bpm} bpm ir tempas pakils automatiškai.`;
   else if(r.bpm<=L&&sqBad(r))r.hint="Jei ir kitas bandymas bus panašus, tempas automatiškai sumažės 5 bpm.";
 }
-function sqStop(){if(SQ.active){SQ.active=false;clearInterval(SQ.iv);busOff(SQ);micOff();P.anLow=null;P.anHi=null;SQ.result=null;paintSQ();}}
+function sqStop(){if(SQ.active){SQ.active=false;clearInterval(SQ.iv);busOff(SQ);micOff();P.anLow=null;P.anOn=null;P.anHi=null;SQ.result=null;paintSQ();}}
 function sqHtml(id,bpm){
   const tgt=sqBpm(id,bpm||60);
   if(SQ.active&&SQ.id===id){const i=Math.max(0,SQ.curSlot);const cur=SQ.list[Math.min(i,SQ.list.length-1)];const nx=SQ.list[i+1];
