@@ -385,7 +385,7 @@ document.addEventListener("visibilitychange",()=>{if(document.visibilityState===
 const T={id:null,total:0,left:0,running:false,last:0,iv:null,spent:0};
 function fmt(s){s=Math.max(0,Math.ceil(s));return String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
 function timerFor(ex){if(T.id!==ex.id){if(T.running)pauseT();T.id=ex.id;T.total=ex.m*60;T.left=T.total;T.spent=0;}}
-function startT(ex){ac();timerFor(ex);if(ex.seq&&!SQ.active)startSeq(ex.seq,ex.bpm||60,(T.id===ex.id&&T.left>1)?T.left:ex.m*60);if(ex.changes&&!CH2.active&&!RM.active){rmCfg().mode==="rhythm"?startRhythm(ex):startChanges(ex);}if(ex.drill&&!(P.round&&P.round.inline))startInline();timerFor(ex);if(T.left<=0)T.left=T.total;if(ex.bpm&&S.metroWithTimer!==false&&!ex.changes&&!ex.seq){setBpm(ex.bpm);if(!M.running){startM();M.byTimer=true;}}T.running=true;T.last=performance.now();clearInterval(T.iv);T.iv=setInterval(tick,250);wakeOn();paintTimer();}
+function startT(ex){ac();timerFor(ex);if(ex.seq&&!SQ.active)startSeq(ex.seq,sqBpm(ex.seq,ex.bpm||60),(T.id===ex.id&&T.left>1)?T.left:ex.m*60);if(ex.changes&&!CH2.active&&!RM.active){rmCfg().mode==="rhythm"?startRhythm(ex):startChanges(ex);}if(ex.drill&&!(P.round&&P.round.inline))startInline();timerFor(ex);if(T.left<=0)T.left=T.total;if(ex.bpm&&S.metroWithTimer!==false&&!ex.changes&&!ex.seq){setBpm(ex.bpm);if(!M.running){startM();M.byTimer=true;}}T.running=true;T.last=performance.now();clearInterval(T.iv);T.iv=setInterval(tick,250);wakeOn();paintTimer();}
 function stopTimerMetro(){if(M.byTimer){M.byTimer=false;stopM();}}
 function pauseT(){if(!T.running)return;tick();T.running=false;clearInterval(T.iv);stopTimerMetro();if(SQ.active)endSeq();if(P.round&&P.round.inline)endRound();if(CH2.active)endChanges();if(RM.active)endRhythm();flushSpent();wakeOff();paintTimer();}
 function resetT(ex){pauseT();T.id=ex.id;T.total=ex.m*60;T.left=T.total;T.spent=0;paintTimer();}
@@ -396,7 +396,8 @@ function tick(){if(!T.running)return;const now=performance.now();const dt=(now-T
 function paintTimer(){document.querySelectorAll("[data-clock]").forEach(el=>{const id=el.dataset.clock;const ex=curEx().find(e=>e.id===id);if(!ex)return;const tot=ex.m*60;const left=T.id===id?T.left:tot;el.textContent=fmt(left);el.classList.toggle("run",T.id===id&&T.running);const bar=document.querySelector('[data-bar="'+id+'"]');if(bar)bar.style.width=((1-left/tot)*100)+"%";const b=document.querySelector('[data-start="'+id+'"]');if(b)b.textContent=(T.id===id&&T.running)?"Pauzė":(T.id===id&&left<tot&&left>0?"Tęsti":"Pradėti");});}
 
 function curEx(){return PHASES[S.phase].ex;}
-function toast(m){const t=document.getElementById("toast");t.textContent=m;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>{t.hidden=true;},2600);}
+function toast(m,ms){const t=document.getElementById("toast");t.textContent=m;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>{t.hidden=true;},ms||2600);}
+function lvlToast(m){toast(m,5000);}
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
 
 /* ---------- views ---------- */
@@ -424,7 +425,7 @@ function renderToday(){
   curEx().forEach(ex=>{
     const d=dn.includes(ex.id);
     h+=`<details class="ex ${d?'done':''}" data-id="${ex.id}" ${openId===ex.id?'open':''}>
-      <summary><span class="chk" aria-hidden="true"></span><span class="t"><h3>${esc(ex.drill?focusTitle():ex.n)}</h3>${ex.bpm?`<span class="pill">${ex.bpm} bpm</span>`:''}</span><span class="min">${ex.m} min</span></summary>
+      <summary><span class="chk" aria-hidden="true"></span><span class="t"><h3>${esc(ex.drill?focusTitle():ex.n)}</h3>${ex.bpm?`<span class="pill">${ex.seq?sqBpm(ex.seq,ex.bpm):ex.bpm} bpm</span>`:''}</span><span class="min">${ex.m} min</span></summary>
       <div class="body"><p>${esc(ex.h)}</p>
         ${ex.eartr?earTodayHtml(ex):`<div class="timer"><span class="clock" data-clock="${ex.id}">${fmt(ex.m*60)}</span>
           <button class="btn primary" data-start="${ex.id}">Pradėti</button>
@@ -434,7 +435,7 @@ function renderToday(){
         ${ex.changes?`<div class="drill" data-chbox="${ex.id}">${chgHtml(ex)}</div>`:''}
         ${ex.seq?`<div class="drill" data-sqbox="${ex.seq}" data-sqbpm="${ex.bpm||60}">${sqHtml(ex.seq,ex.bpm)}</div>`:''}
         <div class="row" style="justify-content:flex-start">
-          ${ex.bpm?`<button class="btn small" data-mwt="1" aria-pressed="${S.metroWithTimer!==false}">Metronomas su laikmačiu: ${S.metroWithTimer!==false?'įjungtas':'išjungtas'}</button><button class="btn small" data-metro="${ex.bpm}">Atidaryti metronomą</button>`:''}
+          ${ex.bpm?`<button class="btn small" data-mwt="1" aria-pressed="${S.metroWithTimer!==false}">Metronomas su laikmačiu: ${S.metroWithTimer!==false?'įjungtas':'išjungtas'}</button><button class="btn small" data-metro="${ex.seq?sqBpm(ex.seq,ex.bpm):ex.bpm}">Atidaryti metronomą</button>`:''}
           ${EAR_MAP[S.phase+":"+ex.id]?`<button class="btn small" data-ear="1">Natų treniruoklis su mikrofonu</button>`:''}
           <button class="btn small" data-toggle="${ex.id}">${d?'Pažymėti neatliktu':'Pažymėti atliktu'}</button></div>
       </div></details>`;
@@ -466,10 +467,10 @@ function renderGoals(){
   h+='</ul>';
   h+=`<details class="other"><summary>Kaip treniruotis ir kiek kartoti</summary><div class="theory" style="border:0;padding:12px 0 0">
    <p><b>Kasdien trumpai.</b> 20–30 min 5–6 dienas per savaitę duoda daugiau nei 2 valandos kartą. Viena poilsio diena per savaitę naudinga.</p>
-   <p><b>Kartokite iki kokybės, ne iki skaičiaus.</b> Kai pratimas 3 kartus iš eilės pavyksta švariai, kelkite tempą 5 bpm. Jei suklystate 2 kartus iš eilės, tempą nuleiskite 5 bpm.</p>
+   <p><b>Kartokite iki kokybės, ne iki skaičiaus.</b> Pratimuose, kuriuos programėlė tikrina mikrofonu (chromatinis, gamos, pentatonika, ritmiški keitimai), tempą ji keičia pati: po 2 švarių bandymų iš eilės pakelia 5 bpm, po 2 nesėkmingų iš eilės nuleidžia 5 bpm. Kituose pratimuose darykite taip pat patys.</p>
    <p><b>Vienos minutės keitimai:</b> 2–3 bandymai kiekvienai porai su 30 s pertrauka. Svarbiausias geriausias rezultatas.</p>
-   <p><b>Klausa:</b> 1–2 sesijos per dieną. Mažiau nei 6 balai: kartokite lygį. Dvi sesijos iš eilės žemiau 5: grįžkite lygiu žemiau.</p>
-   <p><b>Grifo natos:</b> vienas ratas per dieną. Mokykitės po vieną stygą. Kai 3 dienas vidurkis su gitara iki 2 s (arba ekrano žaidime iki 1 s) ir be klaidų, pereikite prie kitos stygos.</p>
+   <p><b>Klausa:</b> 1–2 sesijos per dieną. Lygį programėlė keičia pati: 9–10 balų pakelia, dvi sesijos iš eilės žemiau 5 balų nuleidžia.</p>
+   <p><b>Grifo natos:</b> vienas ratas per dieną. Mokykitės po vieną stygą. Kai 3 dienas vidurkis su gitara iki 2 s (arba ekrano žaidime iki 1 s) ir be klaidų, programėlė pati pereina prie kitos stygos.</p>
    <p><b>Tikslas pasiektas,</b> kai jį įvykdote 3 skirtingas dienas. Praleista diena rezultato nenubraukia.</p>
    <p><b>Kartą per savaitę</b> 10 min skirkite ankstesnio etapo pratimams.</p>
    <p class="muted">Šiomis taisyklėmis remiasi „Šiandienos rekomendacijos“ skiltyje „Šiandien“.</p></div></details>`;
@@ -643,7 +644,7 @@ function endRound(){
   const res={d:todayStr(),n:R.items.length,first,avg:+avg.toFixed(2),strings:(R.focus||trCfg().strings).slice(),notes:R.focus?"natural":trCfg().notes};
   trHist().push(res);if(S.trHist.length>200)S.trHist.shift();
   if(!R.inline)addSecs((Date.now()-R.started)/1000);
-  P.lastRes={res,items:R.items,inline:!!R.inline};P.round=null;save();micOff();if(!R.inline)chime();renderEar();const db=document.getElementById("drillBox");if(db)db.innerHTML=drillHtml();paintStats&&paintStats();
+  P.lastRes={res,items:R.items,inline:!!R.inline};if(R.inline)P.lastRes.lvl=focusAuto();P.round=null;save();micOff();if(!R.inline)chime();renderEar();const db=document.getElementById("drillBox");if(db)db.innerHTML=drillHtml();paintStats&&paintStats();
 }
 function stopRound(){if(P.round&&P.round.items.length>0){endRound();}else{P.round=null;clearInterval(P.tickIv);micOff();renderEar();}}
 
@@ -738,13 +739,15 @@ function focusStrings(){return FOCUS_SEQ[focusIdx()];}
 function focusTitle(){const f=focusStrings();return f.length===6?"Natos visose stygose":"Natos "+f.join(" ir ")+" stygoje";}
 function cellsFor(strs){const out=[];strs.forEach(s=>{for(let fr=0;fr<=12;fr++){const m=STR_MIDI[s]+fr;const n=NOTES[m%12];if(NATURAL.includes(n))out.push({s,fr,m,n});}});return out;}
 function focusGoodDays(){const f=focusStrings().join();const since=S.focus.since;const days=new Set();(S.trHist||[]).forEach(x=>{if(x.d>=since&&x.strings.join()===f&&x.n>=8&&x.avg<=2&&x.first===x.n)days.add(x.d);});(S.fgHist||[]).forEach(x=>{if(x.d>=since&&x.strings.slice().sort().join()===focusStrings().slice().sort().join()&&x.n>=10&&x.avg<=1&&x.first===x.n)days.add(x.d);});return days.size;}
+function focusAuto(){const i=focusIdx();const next=FOCUS_SEQ[i+1];if(!next||focusGoodDays()<3)return null;
+  S.focus={i:i+1,since:todayStr(),auto:true};const m="3 geros dienos! Automatiškai pereita prie: "+(next.length===6?"visų stygų":next.join(" ir ")+" stygos")+".";lvlToast(m);return m;}
 function focusInfoHtml(){
   const f=focusStrings();const i=focusIdx();const day=daysBetween(S.focus.since,todayStr())+1;const good=focusGoodDays();const next=FOCUS_SEQ[i+1];
   const ready=good>=3;
   return `<div class="stack" style="gap:6px;width:100%;align-items:center">
    <span class="eyebrow">Mokomasi: ${f.length===6?"visos stygos":f.join(" ir ")+" styga"} · ${day}-a diena</span>
    <div class="beats" aria-label="Geros dienos">${[0,1,2].map(k=>`<i class="${k<good?'on':''}"></i>`).join('')}</div>
-   <span class="muted" style="font-size:.88rem">${ready?`Puiku! 3 dienos be klaidų ir be skaičiavimo.`:`Gerų dienų: ${good} iš 3. Diena įskaitoma, kai ratas su gitara be klaidų (bent 8 natos, vidurkis iki 2 s) arba ekrano žaidimas šioje stygoje be klaidų (bent 10 natų, vidurkis iki 1 s).`}${next?` Tada pereisite prie: ${next.length===6?"visų stygų":next.join(" ir ")+" stygos"}.`:''}</span>
+   <span class="muted" style="font-size:.88rem">${ready?`Puiku! 3 dienos be klaidų ir be skaičiavimo.`:`Gerų dienų: ${good} iš 3. Diena įskaitoma, kai ratas su gitara be klaidų (bent 8 natos, vidurkis iki 2 s) arba ekrano žaidimas šioje stygoje be klaidų (bent 10 natų, vidurkis iki 1 s).`}${next?` Tada programėlė automatiškai pereis prie: ${next.length===6?"visų stygų":next.join(" ir ")+" stygos"}.`:''}</span>
    ${next?`<button class="btn small ${ready?'primary':''}" id="focusNext">${ready?'Pereiti prie kitos stygos':'Pereiti anksčiau'}</button>`:''}
    ${i>0?`<button class="btn small" id="focusPrev">Grįžti prie ankstesnės</button>`:''}
    <span class="muted" style="font-size:.85rem">Paspaudus „Pradėti“, natos bus rodomos tik šioje stygoje. Po 6 s parodoma užuomina.</span></div>`;
@@ -756,7 +759,7 @@ function drillHtml(){
     <span class="heard" id="trHeard">${R.manual?'Sugrokite ir paspauskite „Radau“':'Klausau…'}</span><span class="wrongtag" id="trWrong" hidden>Neteisinga nata, bandykite dar</span>
     <div class="row">${R.manual?'<button class="btn primary small" id="trFound">Radau</button>':''}<button class="btn small" id="trSkip">Praleisti</button></div>`;
   if(P.lastRes&&P.lastRes.inline){const r=P.lastRes.res;const slow=P.lastRes.items.filter(x=>!x.first||x.t>2).sort((a,b)=>b.t-a.t).slice(0,4);
-    return `<b>Rezultatas: ${r.first}/${r.n} teisingai iš pirmo karto, vidutiniškai ${r.avg.toFixed(1)} s natai.</b>${r.n<8?'<span class="muted" style="font-size:.88rem">Dienos įskaitai reikia bent 8 natų.</span>':''}${slow.length?'<span class="muted">Pakartokite: '+slow.map(x=>`${x.n} (${x.s} st.)`).join(', ')+'</span>':''}`+focusInfoHtml();}
+    return `${P.lastRes.lvl?`<div class="note" style="text-align:center"><b>${esc(P.lastRes.lvl)}</b></div>`:''}<b>Rezultatas: ${r.first}/${r.n} teisingai iš pirmo karto, vidutiniškai ${r.avg.toFixed(1)} s natai.</b>${r.n<8?'<span class="muted" style="font-size:.88rem">Dienos įskaitai reikia bent 8 natų.</span>':''}${slow.length?'<span class="muted">Pakartokite: '+slow.map(x=>`${x.n} (${x.s} st.)`).join(', ')+'</span>':''}`+focusInfoHtml();}
   return focusInfoHtml();
 }
 function earClick(t){
@@ -903,23 +906,35 @@ function endSess(){
   const gr=gradeSess(ss);const dur=Math.round((Date.now()-ss.t0)/1000);
   const r={d:todayStr(),mode:ss.mode,level:ss.level,n,ok:ss.ok,grade:gr.g,medT:+gr.medT.toFixed(1),dur,replays:ss.replays,conf:Object.entries(ss.conf).sort((a,b)=>b[1]-a[1]).slice(0,3),notes:gr.notes,up:false,fix:ss.fix};
   const max=EMODES[ss.mode].levels.length-1;
-  if(!ss.fix&&gr.g>=9&&n>=10&&ss.level===eLevel(ss.mode)&&ss.level<max){eSt().level[ss.mode]=ss.level+1;r.up=true;}
   if(!S.earHist)S.earHist=[];S.earHist.push(r);if(S.earHist.length>300)S.earHist.shift();
+  if(!ss.fix&&n>=10&&ss.level===eLevel(ss.mode))earAuto(r,max);
+  if(r.up)lvlToast(`${EMODES[r.mode].t}: lygis pakeltas į ${r.level+2}`);else if(r.down)lvlToast(`${EMODES[r.mode].t}: lygis sumažintas į ${r.level}`);
   if(E.fromToday){const ex=curEx().find(e=>e.id===E.fromToday);const modes=ex?[ex.eartr].concat(ex.eartr2?[ex.eartr2]:[]):[];if(modes.every(m=>S.earHist.some(x=>x.mode===m&&x.d===r.d)))markDone(E.fromToday,true);}
   addSecs(dur);save();paintStats&&paintStats();E.last=r;E.q=null;chime();renderEarTrain();
+}
+/* automatinis lygio keitimas: 9–10 balų pakelia lygį (grįžus po sumažinimo reikia dviejų tokių sesijų iš eilės), dvi sesijos iš eilės žemiau 5 balų jį sumažina */
+function earAuto(r,max){
+  const s=eSt();if(!s.drop)s.drop={};const m=r.mode,L=r.level;
+  const T=[];const H=S.earHist;for(let i=H.length-1;i>=0;i--){const x=H[i];if(x.mode!==m||x.fix||x.n<10)continue;if(x.level!==L||(x!==r&&(x.up||x.down)))break;T.push(x);}
+  const need=s.drop[m]===L+1?2:1;
+  if(L<max&&T.length>=need&&T.slice(0,need).every(x=>x.grade>=9)){s.level[m]=L+1;r.up=true;delete s.drop[m];return;}
+  if(L>0&&T.length>=2&&T[0].grade<5&&T[1].grade<5){s.level[m]=L-1;r.down=true;s.drop[m]=L;return;}
+  if(L<max&&r.grade>=9)r.hint="Dar viena tokia sesija ir lygis pakils automatiškai.";
+  else if(L<max&&r.grade>=7)r.hint="Surinkite 9 ar 10 balų ir lygis pakils automatiškai.";
+  else if(L>0&&r.grade<5)r.hint="Jei ir kita sesija bus žemiau 5 balų, lygis automatiškai sumažės.";
 }
 function fmtDur(s){return s>=60?Math.floor(s/60)+" min "+(s%60)+" s":s+" s";}
 function resultHtml(r){
   return `<div class="metro" style="align-items:stretch;gap:10px"><div style="display:flex;align-items:baseline;gap:10px;justify-content:center"><span class="bpm">${r.grade}</span><span class="muted">/10 · ${gradeWord(r.grade)}</span></div>
-   ${r.up?`<div class="note" style="text-align:center"><b>Atsivėrė ${r.level+2} lygis: ${esc(levelName(r.mode,r.level+1))}</b></div>`:''}
+   ${r.up?`<div class="note" style="text-align:center"><b>Lygis pakeltas automatiškai: ${r.level+2} lygis (${esc(levelName(r.mode,r.level+1))})</b></div>`:r.down?`<div class="note" style="text-align:center"><b>Daug klaidų dvi sesijas iš eilės, todėl lygis sumažintas automatiškai: ${r.level} lygis (${esc(levelName(r.mode,r.level-1))})</b></div>`:r.hint?`<span class="muted" style="text-align:center;font-size:.9rem">${esc(r.hint)}</span>`:''}
    <div class="rgrid"><div class="stat"><b>${r.ok}/${r.n}</b><small>teisingai (${Math.round(100*r.ok/r.n)}%)</small></div><div class="stat"><b>${r.medT} s</b><small>vid. atsakymo laikas</small></div><div class="stat"><b>${fmtDur(r.dur)}</b><small>sesijos trukmė</small></div><div class="stat"><b>${r.replays}</b><small>kartų klausyta dar kartą</small></div></div>
    ${r.conf.length?`<p><b>Painiojote:</b> ${r.conf.map(([k,v])=>esc(k)+(v>1?` (${v} k.)`:"")).join(", ")}</p>`:''}
-   <details><summary class="muted">Kaip apskaičiuotas pažymys</summary><ul class="tips" style="margin-top:6px">${r.notes.map(n=>`<li>${esc(n)}</li>`).join('')}<li>9 ar 10 balų atveria kitą lygį.</li></ul></details>
+   <details><summary class="muted">Kaip apskaičiuotas pažymys</summary><ul class="tips" style="margin-top:6px">${r.notes.map(n=>`<li>${esc(n)}</li>`).join('')}<li>Lygis keičiamas automatiškai: 9 ar 10 balų pakelia lygį (jei lygis neseniai buvo sumažintas, reikia dviejų tokių sesijų iš eilės), dvi sesijos iš eilės žemiau 5 balų jį sumažina. Sesija turi būti bent 10 klausimų.</li></ul></details>
    ${E.fromToday?'<button class="btn primary" data-gotab="today">Grįžti į šiandienos pratimus</button><button class="btn" id="eStart">Dar viena sesija</button>':'<button class="btn primary" id="eStart">Nauja sesija</button>'}</div>`;
 }
 function histEar(m){
   const H=(S.earHist||[]).filter(x=>x.mode===m).slice(-6).reverse();if(!H.length)return '';
-  return '<h3>Paskutinės sesijos</h3><div class="hm-wrap"><table class="res"><thead><tr><th>Data</th><th>Lygis</th><th>Pažymys</th><th>Teisingai</th><th>Laikas</th></tr></thead><tbody>'+H.map(x=>`<tr><td class="mono">${x.d.slice(5)}</td><td class="mono">${x.fix?"taisymas":x.level+1}</td><td class="mono"><b>${x.grade}</b></td><td class="mono">${x.ok}/${x.n}</td><td class="mono">${x.medT} s</td></tr>`).join('')+'</tbody></table></div>';
+  return '<h3>Paskutinės sesijos</h3><div class="hm-wrap"><table class="res"><thead><tr><th>Data</th><th>Lygis</th><th>Pažymys</th><th>Teisingai</th><th>Laikas</th></tr></thead><tbody>'+H.map(x=>`<tr><td class="mono">${x.d.slice(5)}</td><td class="mono">${x.fix?"taisymas":(x.level+1)+(x.up?" ↑":x.down?" ↓":"")}</td><td class="mono"><b>${x.grade}</b></td><td class="mono">${x.ok}/${x.n}</td><td class="mono">${x.medT} s</td></tr>`).join('')+'</tbody></table></div>';
 }
 function renderEarTrain(){
   const v=document.getElementById("v-ear2");if(!v)return;const m=E.mode,def=EMODES[m],L=eLevel(m),ss=E.sess;
@@ -931,7 +946,7 @@ function renderEarTrain(){
     v.innerHTML=head+`<div class="row" style="justify-content:flex-start">${chips}</div>
      ${E.last&&E.last.mode===m?resultHtml(E.last):''}
      <div class="theory" style="gap:10px">
-      <span class="eyebrow">Lygis</span><div class="row" style="justify-content:flex-start">${lv}</div><span class="muted" style="font-size:.9rem">${L+1} lygis: ${esc(levelName(m,L))}</span>
+      <span class="eyebrow">Lygis · keičiamas automatiškai</span><div class="row" style="justify-content:flex-start">${lv}</div><span class="muted" style="font-size:.9rem">${L+1} lygis: ${esc(levelName(m,L))}</span>
       ${m==="iv"?`<span class="eyebrow">Intervalų grojimas</span><div class="row" style="justify-content:flex-start">${[["up","Aukštyn"],["down","Žemyn"],["harm","Kartu"],["mix","Mišriai"]].map(([k,t])=>`<button class="btn small" data-istyle="${k}" ${tog(E.ivStyle===k)}>${t}</button>`).join('')}</div>`:''}
       <span class="eyebrow">Klausimų sesijoje</span><div class="row" style="justify-content:flex-start">${ln}</div>
       ${E.last&&E.last.mode===m?'':`<button class="btn primary" id="eStart">Pradėti sesiją</button>`}
@@ -961,7 +976,7 @@ function renderEarTrain(){
 function earTrainClick(t){
   if(t.dataset.emode)E.fromToday=null;
   if(t.dataset.emode){if(E.sess)return true;E.mode=t.dataset.emode;E.q=null;renderEarTrain();return true;}
-  if(t.dataset.elevel){eSt().level[E.mode]=+t.dataset.elevel;save();E.last=null;renderEarTrain();return true;}
+  if(t.dataset.elevel){eSt().level[E.mode]=+t.dataset.elevel;if(eSt().drop)delete eSt().drop[E.mode];save();E.last=null;renderEarTrain();return true;}
   if(t.dataset.istyle){E.ivStyle=t.dataset.istyle;renderEarTrain();return true;}
   if(t.dataset.elen){eSt().len=+t.dataset.elen;save();renderEarTrain();return true;}
   if(t.id==="eStart"){startSess(false);return true;}
@@ -1085,18 +1100,41 @@ async function startRhythm(ex){
   const ok=await micOn();if(!RM.active){if(ok)micOff();return;}
   if(!ok){RM.active=false;toast("Ritmo analizei reikia mikrofono.");paintChg();return;}
   const a=AC;const lp1=a.createBiquadFilter(),lp2=a.createBiquadFilter();lp1.type=lp2.type="lowpass";lp1.frequency.value=lp2.frequency.value=900;
-  P.anLow=a.createAnalyser();P.anLow.fftSize=512;P.src.connect(lp1);lp1.connect(lp2);lp2.connect(P.anLow);P.lbuf=new Float32Array(512);
+  P.anLow=a.createAnalyser();P.anLow.fftSize=512;P.src.connect(lp1);lp1.connect(lp2);lp2.connect(P.anLow);P.lbuf=new Float32Array(512);onInit(a,lp2,RM);
   P.an2=a.createAnalyser();P.an2.fftSize=8192;P.an2.smoothingTimeConstant=0;P.src.connect(P.an2);P.fbuf=new Float32Array(P.an2.frequencyBinCount);
   // metronomo spragsėjimo girdėjimas per mikrofoną: išmatuojame telefono garso vėlavimą
   const hp1=a.createBiquadFilter(),hp2=a.createBiquadFilter();hp1.type=hp2.type="highpass";hp1.frequency.value=hp2.frequency.value=2400;P.anHi=a.createAnalyser();P.anHi.fftSize=2048;P.src.connect(hp1);hp1.connect(hp2);hp2.connect(P.anHi);P.hbuf=new Float32Array(2048);
   RM.beat=-4;RM.nextT=a.currentTime+0.25;RM.start=RM.nextT+4*rmBeatDur();clearInterval(RM.iv);vizStop(RM);busOn(RM);RM.iv=setInterval(rmSched,25);paintChg();
 }
+/* užgavimo (garso pradžios) paieška, bendra akordų ritmui ir natų sekoms.
+   Energija skaičiuojama 43 ms lange kas 1,3 ms ir lyginama su žemiausiu lygiu 25–80 ms prieš tai,
+   todėl naujas braukimas aptinkamas ir tada, kai ankstesnis akordas dar skamba. Laikas atsekamas iki kilimo pradžios,
+   ne iki momento, kai garsas peržengė slenkstį: braukimas per 6 stygas trunka 20–70 ms, o seniau buvo matuojama jo vidurys ar pabaiga. */
+const ON_B=64,ON_W=2048,ON_N=8192,ON_BACK=60,ON_GAP=20;
+function onInit(a,node,st){P.anOn=a.createAnalyser();P.anOn.fftSize=ON_N;node.connect(P.anOn);P.obuf=new Float32Array(ON_N);P.ocs=new Float64Array(ON_N+1);st.oE={};st.oLast=0;st.oOn=-9;}
+function onScan(st,ratio,minA,refr,detect){
+  const a=AC,an=P.anOn;if(!an)return null;const sr=a.sampleRate;an.getFloatTimeDomainData(P.obuf);
+  const end=Math.round(a.currentTime*sr),beg=end-ON_N,c=P.ocs;c[0]=0;for(let i=0;i<ON_N;i++)c[i+1]=c[i]+P.obuf[i]*P.obuf[i];
+  const E=st.oE,b0=Math.ceil((beg+ON_W)/ON_B),b1=Math.floor(end/ON_B);
+  for(let b=b0;b<=b1;b++)if(E[b]==null){const hi=b*ON_B-beg;E[b]=Math.sqrt(Math.max(0,c[hi]-c[hi-ON_W])/ON_W);}
+  for(const k in E)if(+k<b0-ON_BACK-4)delete E[k];
+  if(!detect)return null;
+  let found=null;
+  for(let b=Math.max(st.oLast+1,b0-ON_BACK);b<=b1;b++){st.oLast=b;
+    if(E[b]==null||E[b-1]==null||E[b-ON_BACK]==null)continue;const bt=b*ON_B/sr;if(bt-st.oOn<refr)continue;
+    let ref=Infinity;for(let k=b-ON_BACK;k<=b-ON_GAP;k++)if(E[k]!=null&&E[k]<ref)ref=E[k];
+    const cur=(E[b]+E[b-1])/2;
+    if(cur>minA&&cur>ref*ratio){let j=b;while(j>b-ON_BACK&&E[j-1]!=null&&E[j-1]>ref*1.08)j--;st.oOn=bt;found=j*ON_B/sr-(a.baseLatency||0);break;}
+  }
+  return found;
+}
 function rhythmFrame(){
   const a=AC;P.anLow.getFloatTimeDomainData(P.lbuf);let rms=0;for(let i=0;i<512;i++)rms+=P.lbuf[i]*P.lbuf[i];rms=Math.sqrt(rms/512);
   const fl=RM.floor;fl.push(rms);if(fl.length>6)fl.shift();const floor=Math.min(...fl);const t=a.currentTime;
   if(P.anHi&&t<RM.start)rmHearClick(t);
+  const on=onScan(RM,1.3,Math.max(0.01,((S.cal&&S.cal.noiseLow)||0)*3),0.18,!RM.pend);
   if(RM.pend){const p=RM.pend;if(rms>p.peak){p.peak=rms;p.peakT=t;}if(t>=p.t0+0.3){RM.pend=null;finishStrum(p);}return;}
-  if(rms>Math.max(0.01,((S.cal&&S.cal.noiseLow)||0)*3)&&rms>floor*2.5&&t-RM.lastOn>0.18){RM.lastOn=t;RM.pend={t:t-0.006-(a.baseLatency||0),t0:t,peak:rms,peakT:t};}
+  if(on!=null){RM.lastOn=t;RM.pend={t:on,t0:t,peak:rms,peakT:t};}
 }
 function rmHearClick(t){hearClk(RM,t,rmBeatDur());}
 function rmLatency(){latFinish(RM);}
@@ -1115,7 +1153,7 @@ function finishStrum(p){
 function ltPl(n,a,b,c){const d=n%10,h=n%100;if(d===1&&h!==11)return a;if(d>=2&&d<=9&&!(h>=11&&h<=19))return b;return c;}
 function median(a){if(!a.length)return 0;const b=a.slice().sort((x,y)=>x-y);const m=b.length>>1;return b.length%2?b[m]:(b[m-1]+b[m])/2;}
 function endRhythm(){
-  if(!RM.active)return;RM.active=false;clearInterval(RM.iv);vizStop(RM);busOff(RM);micOff();P.an2=null;P.anLow=null;P.anHi=null;
+  if(!RM.active)return;RM.active=false;clearInterval(RM.iv);vizStop(RM);busOff(RM);micOff();P.an2=null;P.anLow=null;P.anOn=null;P.anHi=null;
   const S0=RM.strums.filter(s=>!s.extra);const lastBeat=S0.length?Math.max(...S0.map(s=>s.k)):0;
   if(S0.length>=6){
     const normal=S0.filter(s=>!s.change);const changes=S0.filter(s=>s.change);
@@ -1136,10 +1174,32 @@ function endRhythm(){
     if(r.steady<70||r.loud+r.soft>r.n*0.25)tips.push("Braukimų stiprumas nevienodas. Braukite iš riešo, atpalaiduota ranka, tolygiu judesiu.");
     if(r.harsh>r.n*0.2)tips.push(r.harsh+" "+ltPl(r.harsh,"braukimas skambėjo","braukimai skambėjo","braukimų skambėjo")+" šiurkščiai (barška). Braukite lengviau ir tikrinkite, ar pirštai spaudžia arti skersinės.");
     if(r.rise>120)tips.push("Braukimas gana lėtas ("+r.rise+" ms). Perbraukite stygas vienu greitesniu judesiu.");
-    if(!tips.length&&r.onTime>=80)tips.push("Puikiai! Kitą kartą pakelkite tempą 5 bpm"+(RM.per===4?" arba keiskite kas 2 tvaksnius":"")+".");
-    r.tips=tips;if(!S.rhHist)S.rhHist=[];S.rhHist.push(r);if(S.rhHist.length>200)S.rhHist.shift();RM.result=r;save();
+    if(!tips.length&&r.onTime>=80)tips.push("Puikiai! Ritmas tikslus.");
+    r.tips=tips;if(!S.rhHist)S.rhHist=[];S.rhHist.push(r);if(S.rhHist.length>200)S.rhHist.shift();rhAuto(r);RM.result=r;save();if(r.lvl)lvlToast(r.lvl.txt);
   }else RM.result={tooShort:true};
   paintChg();
+}
+/* automatinis tempo keitimas: 2 geri bandymai iš eilės +5 bpm (grįžtant prie nepavykusio tempo reikia 3), 2 silpni iš eilės −5 bpm */
+const RH_MAX=100;
+function rhGood(r){return r.onTime>=80&&r.chOk===r.changes&&r.missed<=Math.max(2,r.n*0.1);}
+function rhBad(r){return r.onTime<60||r.missed>Math.max(3,r.n*0.25);}
+function rhAuto(r){
+  const c=rmCfg();if(c.rbpm!==r.bpm||c.rper!==r.per||r.n<12)return;
+  const H=S.rhHist;const T=[];for(let i=H.length-1;i>=0;i--){const x=H[i];if(x.bpm!==r.bpm||x.per!==r.per||(x!==r&&x.lvl))break;if(x.n>=12)T.push(x);}
+  const F=c.rFail&&c.rFail.per===r.per&&r.bpm<c.rFail.bpm&&r.bpm+5>=c.rFail.bpm;const need=F?3:2;
+  let g=0;while(g<T.length&&rhGood(T[g]))g++;
+  let nb=r.bpm,np=r.per,up=null;
+  if(g>=need){up=true;if(r.per===4&&r.bpm>=90){np=2;nb=70;}else nb=Math.min(RH_MAX,r.bpm+5);}
+  else if(T.length>=2&&rhBad(T[0])&&rhBad(T[1])){up=false;if(r.per===2&&r.bpm<=60){np=4;nb=80;}else nb=Math.max(40,r.bpm-5);}
+  if(up===null||(nb===r.bpm&&np===r.per)){
+    if(up&&nb===r.bpm)r.hint="Pasiektas didžiausias tempas.";
+    else if(rhGood(r))r.hint=`Gerai! Dar ${need-g} ${ltPl(need-g,"toks bandymas","tokie bandymai","tokių bandymų")} ir tempas pakils automatiškai.`;
+    else if(rhBad(r))r.hint="Jei ir kitas bandymas bus panašus, tempas automatiškai sumažės 5 bpm.";
+    return;}
+  if(up){if(c.rFail&&(np!==c.rFail.per||nb>c.rFail.bpm))delete c.rFail;}else c.rFail={bpm:r.bpm,per:r.per};
+  c.rbpm=nb;c.rper=np;
+  const per=np!==r.per?`, akordą keisite kas ${np} tvaksnius`:"";
+  r.lvl={up,bpm:nb,per:np,txt:up?`Tempas pakeltas automatiškai: ${nb} bpm${per}.`:`Daug klaidų du bandymus iš eilės, todėl tempas sumažintas automatiškai: ${nb} bpm${per}.`};
 }
 function paintRhythmLive(){
   const box=document.querySelector(`[data-chbox="${RM.ex&&RM.ex.id}"]`);if(!box||!RM.active)return;
@@ -1160,7 +1220,7 @@ function rhythmHtml(ex){
      <div class="beats rbeats">${Array.from({length:RM.per},(_,i)=>`<i class="${i===0?'first':''}"></i>`).join('')}</div>
      <span class="heard" id="rmLast">Po 4 tvaksnių įžangos braukite žemyn ant kiekvieno tvaksnio</span><span class="muted" style="font-size:.85rem">Braukimų: <b id="rmCount">0</b></span><span class="muted" style="font-size:.8rem" id="rmLat">Įžangos metu matuojamas telefono garso vėlavimas, negrokite.</span>`;
   }
-  const bp=[50,60,70,80,90].map(b=>`<button class="btn small" data-rbpm="${b}" ${tog(c.rbpm===b)}>${b}</button>`).join('');
+  const bp=[...new Set([50,60,70,80,90,c.rbpm])].sort((a,b)=>a-b).map(b=>`<button class="btn small" data-rbpm="${b}" ${tog(c.rbpm===b)}>${b}</button>`).join('');
   const pe=[4,2].map(n=>`<button class="btn small" data-rper="${n}" ${tog(c.rper===n)}>kas ${n}</button>`).join('');
   const R=RM.result&&RM.ex&&RM.ex.id===ex.id?RM.result:null;
   let res='';
@@ -1173,8 +1233,9 @@ function rhythmHtml(ex){
      <div class="stat"><b>${R.missed}</b><small>praleisti tvaksniai</small></div>
      <div class="stat"><b>${R.harsh}</b><small>šiurkštūs braukimai</small></div></div>${R.lat!=null?`<span class="muted" style="font-size:.82rem">Atimtas telefono vėlavimas ${R.lat} ms${R.latSrc==="none"?" (neišmatuotas)":""}. Po to braukimai vidutiniškai ${R.rawLate>0?"+":""}${R.rawLate} ms nuo spragtelėjimo.${Math.abs(R.rawLate)>80?" Jei jaučiate, kad grojote kartu su spragtelėjimu, išmatuokite vėlavimą skiltyje „Gitaros pritaikymas“.":""}</span>`:''}
      ${R.loud+R.soft?`<span class="muted" style="font-size:.88rem">Per stiprūs: ${R.loud}, per silpni: ${R.soft} (lyginant su ${R.calRef?"jūsų gitaros etalonu":"jūsų vidutiniu braukimu"}). Braukimo trukmė ~${R.rise} ms.</span>`:`<span class="muted" style="font-size:.88rem">Braukimo trukmė ~${R.rise} ms.</span>`}
+     ${R.lvl?`<div class="note" style="text-align:center"><b>${esc(R.lvl.txt)}</b></div>`:R.hint?`<span class="muted" style="font-size:.9rem">${esc(R.hint)}</span>`:''}
      <ul class="tips">${R.tips.map(t=>`<li>${esc(t)}</li>`).join('')}</ul>`;
-  return `${res}<span class="eyebrow">Tempas (bpm)</span><div class="row">${bp}</div><span class="eyebrow">Keisti akordą</span><div class="row">${pe}</div>
+  return `${res}<span class="eyebrow">Tempas (bpm) · keičiamas automatiškai</span><div class="row">${bp}</div><span class="eyebrow">Keisti akordą</span><div class="row">${pe}</div>
    <span class="muted" style="font-size:.88rem">Metronomas muša 4 įžangos tvaksnius, tada braukite žemyn ant kiekvieno tvaksnio ir keiskite akordą ties paryškintu tvaksniu. Programėlė matuoja, ar pataikote į tvaksnį, ar keitimai laiku, ar braukimai vienodo stiprumo ir ar neskamba šiurkščiai. Metronomą leiskite per telefono garsiakalbį, ne per ausines: pagal jį programėlė išmatuoja telefono vėlavimą.</span>`;
 }
 function rhyClick(t){
@@ -1220,7 +1281,7 @@ function calLatFrame(){const L=CAL.lst;const t=AC.currentTime;if(!L||!P.anHi)ret
   if(t>L.start+10*L.bd+0.7){const c=L.clk;let v=null;if(c.length>=4){const md=median(c);const good=c.filter(x=>Math.abs(x-md)<0.02);if(good.length>=4)v=median(good);}
     calStop();if(v!=null){S.latCal={v,d:todayStr()};S.rmLat=v;save();CAL.msg=`Telefono vėlavimas ${Math.round(v*1000)} ms. Jis bus atimamas visuose ritmo pratimuose.`;}
     else CAL.msg="Nepavyko aiškiai išgirsti spragtelėjimų. Padidinkite garsą, nenaudokite ausinių, kambaryje turi būti tylu, ir pakartokite.";renderCal();}}
-function calStop(){CAL.tok=(CAL.tok||0)+1;busOff(CAL);CAL.active=false;CAL.step=null;CAL.target=null;micOff();P.an2=null;P.anLow=null;P.anHi=null;}
+function calStop(){CAL.tok=(CAL.tok||0)+1;busOff(CAL);CAL.active=false;CAL.step=null;CAL.target=null;micOff();P.an2=null;P.anLow=null;P.anOn=null;P.anHi=null;}
 function calFrame(){
   if(CAL.step==="lat"){calLatFrame();return;}
   if(!P.anLow)return;const now=performance.now();const low=lowRms();
@@ -1307,10 +1368,12 @@ function recs(){
     if(td>=2)t=`„${nm}“: šiandien ${td} sesijos, užteks ✓`;
     else if(!H.length)t=`„${nm}“: 1 sesija, ${L+1} lygis.`;
     else{const last=H[H.length-1];const prev=H[H.length-2];
-      if(last.up)t=`„${nm}“: atsivėrė ${L+1} lygis. 1–2 sesijos jame.`;
-      else if(last.grade>=9)t=`„${nm}“: paskutinė sesija ${last.grade}/10. 1 sesija ${L+1} lygyje, tada galite rinktis sunkesnį.`;
-      else if(last.grade>=6)t=`„${nm}“: paskutinė sesija ${last.grade}/10. 2 sesijos ${L+1} lygyje, siekite 9.`;
-      else if(prev&&prev.grade<5&&last.grade<5&&L>0)t=`„${nm}“: dvi sesijos žemiau 5. Grįžkite į ${L} lygį ir atlikite 2 sesijas.`;
+      const top=L>=EMODES[m].levels.length-1;
+      if(last.up)t=`„${nm}“: lygis automatiškai pakeltas į ${L+1}. 1–2 sesijos jame.`;
+      else if(last.down)t=`„${nm}“: lygis automatiškai sumažintas į ${L+1}. 2 ramios sesijos jame, prieš atsakydami tyliai padainuokite.`;
+      else if(top&&last.grade>=9)t=`„${nm}“: paskutinė sesija ${last.grade}/10, tai aukščiausias lygis. 1 sesija palaikyti formą.`;
+      else if(last.hint)t=`„${nm}“: paskutinė sesija ${last.grade}/10. ${last.hint}`;
+      else if(last.grade>=6)t=`„${nm}“: paskutinė sesija ${last.grade}/10. 2 sesijos ${L+1} lygyje. Surinkus 9 balus, lygis pakils automatiškai.`;
       else t=`„${nm}“: paskutinė sesija ${last.grade}/10. Pakartokite ${L+1} lygį 2 kartus, prieš atsakydami tyliai padainuokite.`;}
     out.push({k:"Klausa",t,act:`<button class="btn small" data-eartr="${m}">Atidaryti</button>`});}
   // grifo natos
@@ -1331,9 +1394,9 @@ function recs(){
     out.push({k:"Keitimai",t:best>=30?`${pr}: tikslas pasiektas (${best} švarių/min). Patvirtinkite 3 dienas iš eilės.`:`${pr}: paskutinis ${last.cleanPerMin} švarių/min, geriausias ${best}. 3 bandymai, siekite ${best+2}.`});});
   // ritmas
   pairs.slice(0,2).forEach(pr=>{const H=(S.rhHist||[]).filter(x=>x.pair===pr);if(!H.length)return;const r=H[H.length-1];
-    let t;if(r.onTime>=80&&r.chOk===r.changes)t=`${pr}: puikus ritmas ${r.bpm} bpm. Pakelkite iki ${Math.min(90,r.bpm+5)} bpm${r.per===4&&r.bpm>=80?" arba keiskite kas 2 tvaksnius":""}.`;
-    else if(r.onTime<60)t=`${pr}: tik ${r.onTime}% braukimų laiku. Sumažinkite tempą iki ${Math.max(50,r.bpm-5)} bpm.`;
-    else t=`${pr}: likite ties ${r.bpm} bpm, kol bent 80% braukimų bus laiku ir visi keitimai laiku.`;
+    let t;if(r.lvl)t=`${pr}: ${r.lvl.txt}`;
+    else if(r.hint)t=`${pr}: ${r.onTime}% braukimų laiku ties ${r.bpm} bpm. ${r.hint}`;
+    else t=`${pr}: ${r.onTime}% braukimų laiku ties ${r.bpm} bpm. Kai bent 80% braukimų ir visi keitimai bus laiku du kartus iš eilės, tempas pakils automatiškai.`;
     out.push({k:"Ritmas",t});});
   const chs=[...new Set(pairs.flatMap(p=>p.split("–")))];chs.forEach(c=>{const w=worstMiss(c);if(w)out.push({k:"Klaidų taisymas",t:`${c}: dažnai neskamba ${w.n} (${w.v} k.). Atlikite akordo patikrą po stygą (akordų pratime).`});});
   if(eex&&fixAvailable(eex.eartr)){const C=topConf(eex.eartr)[0];out.push({k:"Klaidų taisymas",t:`Klausa: taisymo sesija${C?` (painiojate ${C.a} ir ${C.b})`:""}.`,act:`<button class="btn small" data-eartr="${eex.eartr}">Atidaryti</button>`});}
@@ -1450,7 +1513,7 @@ function fgEnd(){
   if(!n){renderEar();return;}
   const avg=FG.times.length?FG.times.reduce((a,b)=>a+b,0)/FG.times.length:0;const best=fgBest();
   const r={d:todayStr(),key:fgKey(),strings:c.strings.slice(),notes:c.notes,maxFret:c.maxFret,n,first:FG.first,wrong:FG.wrong,score:FG.score,avg:+avg.toFixed(1),record:FG.score>best};
-  if(!S.fgHist)S.fgHist=[];S.fgHist.push(r);if(S.fgHist.length>300)S.fgHist.shift();FG.res=r;save();if(r.record)chime();renderEar();
+  if(!S.fgHist)S.fgHist=[];S.fgHist.push(r);if(S.fgHist.length>300)S.fgHist.shift();FG.res=r;focusAuto();save();if(r.record)chime();renderEar();
 }
 function fgClock(){const el=document.getElementById("fgClock");if(el&&FG.active&&!FG.lock)el.textContent=((performance.now()-FG.t0)/1000).toFixed(1)+" s";}
 function fbHtml(){
@@ -1628,7 +1691,7 @@ async function startSeq(id,bpm,loopSecs){
   Object.assign(SQ,{active:true,id,bpm,sub:SEQS[id].sub,N:base.length,loop:!!loopSecs,list:[].concat(...Array(reps).fill(base)),clk:[],lastClk:0,lat:S.rmLat||0,latDone:false,latOk:false,drift:0,offs:[],peaks:[],prevGot:null,floor:[],lastOn:0,pend:null,res:[],last:null,result:null,curSlot:-1});
   paintSQ();const ok=await micOn();if(!SQ.active){if(ok)micOff();return;}
   if(!ok){SQ.active=false;paintSQ();return;}
-  const a=AC;const lp1=a.createBiquadFilter(),lp2=a.createBiquadFilter();lp1.type=lp2.type="lowpass";lp1.frequency.value=lp2.frequency.value=900;P.anLow=a.createAnalyser();P.anLow.fftSize=512;P.src.connect(lp1);lp1.connect(lp2);lp2.connect(P.anLow);P.lbuf=new Float32Array(512);
+  const a=AC;const lp1=a.createBiquadFilter(),lp2=a.createBiquadFilter();lp1.type=lp2.type="lowpass";lp1.frequency.value=lp2.frequency.value=900;P.anLow=a.createAnalyser();P.anLow.fftSize=512;P.src.connect(lp1);lp1.connect(lp2);lp2.connect(P.anLow);P.lbuf=new Float32Array(512);onInit(a,lp2,SQ);
   const hp1=a.createBiquadFilter(),hp2=a.createBiquadFilter();hp1.type=hp2.type="highpass";hp1.frequency.value=hp2.frequency.value=2400;P.anHi=a.createAnalyser();P.anHi.fftSize=2048;P.src.connect(hp1);hp1.connect(hp2);hp2.connect(P.anHi);P.hbuf=new Float32Array(2048);
   const bd=60/SQ.bpm;SQ.beat=-4;SQ.nextT=a.currentTime+0.25;SQ.start=SQ.nextT+4*bd;clearInterval(SQ.iv);busOn(SQ);SQ.iv=setInterval(sqSched,25);paintSQ();
   const vis=[...document.querySelectorAll("[data-sqbox]")].find(b=>b.offsetParent);if(vis)try{vis.scrollIntoView({behavior:"smooth",block:"center"});}catch(e){}
@@ -1663,9 +1726,10 @@ function sqFrame(){
   latFinish(SQ);
   P.anLow.getFloatTimeDomainData(P.lbuf);let rms=0;for(let i=0;i<512;i++)rms+=P.lbuf[i]*P.lbuf[i];rms=Math.sqrt(rms/512);
   const fl=SQ.floor;fl.push(rms);if(fl.length>6)fl.shift();const floor=Math.min(...fl);const sd=sqSlot();
+  const on=onScan(SQ,1.5,Math.max(0.006,((S.cal&&S.cal.noiseLow)||0)*3),Math.min(0.15,sd*0.45),!SQ.pend);
   if(SQ.pend){const p=SQ.pend;if(rms>p.peak)p.peak=rms;P.an.getFloatTimeDomainData(P.buf);const f=detectPitch(P.buf,a.sampleRate);if(f>0&&t>p.t+0.03)p.det.push(Math.round(12*Math.log2(f/440)+69));
     if(t>=p.t+Math.min(0.2,sd*0.7)){SQ.pend=null;sqNote(p);}return;}
-  if(rms>Math.max(0.006,((S.cal&&S.cal.noiseLow)||0)*3)&&rms>floor*2.2&&t-SQ.lastOn>Math.min(0.15,sd*0.45)){SQ.lastOn=t;SQ.pend={t:t-0.006-(a.baseLatency||0),det:[],peak:rms};}
+  if(on!=null){SQ.lastOn=t;SQ.pend={t:on,det:[],peak:rms};}
 }
 function sqNote(p){
   /* drift: asmeninis/likęs vėlavimas, išmatuotas iš paskutinių teisingų natų; jis atimamas prieš priskiriant natą tvaksniui */
@@ -1688,7 +1752,7 @@ function sqNote(p){
   paintSQLive();
 }
 function endSeq(){
-  if(!SQ.active)return;SQ.active=false;clearInterval(SQ.iv);busOff(SQ);micOff();P.anLow=null;P.anHi=null;
+  if(!SQ.active)return;SQ.active=false;clearInterval(SQ.iv);busOff(SQ);micOff();P.anLow=null;P.anOn=null;P.anHi=null;
   const sdE=sqSlot();const el=Math.max(0,Math.min(SQ.list.length,Math.floor((AC.currentTime-SQ.lat-SQ.start)/sdE+0.5)));if(el<SQ.list.length){SQ.list=SQ.list.slice(0,el);SQ.res=SQ.res.slice(0,el);}
   const n=SQ.list.length;const R=SQ.res;const heard=R.filter(Boolean);
   if(!n||heard.length<n*0.3){SQ.result={empty:true};paintSQ();return;}
@@ -1696,11 +1760,27 @@ function endSeq(){
   const okN=SQ.list.filter((_,i)=>R[i]&&R[i].ok).length;const onN=SQ.list.filter((_,i)=>R[i]&&R[i].ok&&Math.abs(R[i].off-base)<=tol).length;
   const errs=SQ.list.map((e,i)=>({i,s:e.s,fr:e.fr,exp:e.m,got:R[i]?R[i].got:null,miss:!R[i],late:R[i]&&R[i].ok?Math.round((R[i].off-base)*1000):0})).filter(x=>x.miss||x.got!==x.exp&&!(x.exp<52&&x.got===x.exp+12)||Math.abs(x.late)>tol*1000);
   const res={d:todayStr(),id:SQ.id,bpm:SQ.bpm,n,rounds:+(n/SQ.N).toFixed(1),ok:Math.round(100*okN/n),onTime:Math.round(100*onN/n),lat:Math.round(SQ.lat*1000),base:Math.round(base*1000),errs:errs.map(e=>({s:e.s,fr:e.fr,got:e.got,miss:e.miss,late:e.late,wrong:!e.miss&&e.got!==e.exp&&!(e.exp<52&&e.got===e.exp+12)}))};
-  if(!S.sqHist)S.sqHist=[];S.sqHist.push(res);if(S.sqHist.length>200)S.sqHist.shift();SQ.result=res;save();if(res.ok>=90&&res.onTime>=80)chime();renderGoals();paintSQ();paintStats&&paintStats();
+  if(!S.sqHist)S.sqHist=[];S.sqHist.push(res);if(S.sqHist.length>200)S.sqHist.shift();sqAuto(res);SQ.result=res;save();if(res.lvl)lvlToast(SEQS[res.id].t+": "+res.lvl.txt);if(res.ok>=90&&res.onTime>=80)chime();renderGoals();paintSQ();paintStats&&paintStats();
 }
-function sqStop(){if(SQ.active){SQ.active=false;clearInterval(SQ.iv);busOff(SQ);micOff();P.anLow=null;P.anHi=null;SQ.result=null;paintSQ();}}
+/* automatinis tempo keitimas: 2 švarūs bandymai iš eilės +5 bpm (grįžtant prie nepavykusio tempo reikia 3), 2 nesėkmingi iš eilės −5 bpm */
+function sqLv(){if(!S.sqLv)S.sqLv={};return S.sqLv;}
+function sqBpm(id,def){const v=sqLv()[id];return v&&v.bpm?v.bpm:(def||60);}
+function sqGood(r){return r.ok>=90&&r.onTime>=80;}
+function sqBad(r){return r.ok<70||r.onTime<50;}
+function sqAuto(r){
+  if(r.rounds<0.8)return;
+  const cur=sqLv()[r.id]||{};const L=cur.bpm||r.bpm;
+  const H=S.sqHist;const T=[];for(let i=H.length-1;i>=0;i--){const x=H[i];if(x.id!==r.id)continue;if(x.bpm!==r.bpm||(x!==r&&x.lvl))break;if(x.rounds>=0.8)T.push(x);}
+  const need=(cur.fail&&r.bpm<cur.fail&&r.bpm+5>=cur.fail)?3:2;
+  let g=0;while(g<T.length&&sqGood(T[g]))g++;
+  if(r.bpm>=L&&g>=need&&r.bpm<160){const nb=r.bpm+5;sqLv()[r.id]={bpm:nb,fail:cur.fail&&cur.fail>nb?cur.fail:undefined};r.lvl={up:true,bpm:nb,txt:`tempas pakeltas automatiškai iki ${nb} bpm.`};return;}
+  if(r.bpm<=L&&r.bpm>40&&T.length>=2&&sqBad(T[0])&&sqBad(T[1])){const nb=Math.max(40,r.bpm-5);sqLv()[r.id]={bpm:nb,fail:r.bpm};r.lvl={up:false,bpm:nb,txt:`daug klaidų du bandymus iš eilės, todėl tempas sumažintas automatiškai iki ${nb} bpm.`};return;}
+  if(r.bpm>=L&&sqGood(r))r.hint=`Dar ${need-g} ${ltPl(need-g,"toks bandymas","tokie bandymai","tokių bandymų")} ${r.bpm} bpm ir tempas pakils automatiškai.`;
+  else if(r.bpm<=L&&sqBad(r))r.hint="Jei ir kitas bandymas bus panašus, tempas automatiškai sumažės 5 bpm.";
+}
+function sqStop(){if(SQ.active){SQ.active=false;clearInterval(SQ.iv);busOff(SQ);micOff();P.anLow=null;P.anOn=null;P.anHi=null;SQ.result=null;paintSQ();}}
 function sqHtml(id,bpm){
-  const tgt=bpm||60;
+  const tgt=sqBpm(id,bpm||60);
   if(SQ.active&&SQ.id===id){const i=Math.max(0,SQ.curSlot);const cur=SQ.list[Math.min(i,SQ.list.length-1)];const nx=SQ.list[i+1];
     return `<span class="eyebrow">${esc(SEQS[id].t)} · ${SQ.bpm} bpm${SQ.sub>1?' · aštuntinėmis':''}</span>
      <div class="target" id="sqNow">${SQ.curSlot<0?'Įžanga':`${cur.s} st. ${cur.fr} sk.`}</div><div class="strlabel" id="sqNext">${SQ.curSlot<0?'Pirmoji: '+SQ.list[0].s+' st. '+SQ.list[0].fr+' sk.':nx?'Toliau: '+nx.s+' st. '+nx.fr+' sk.':'Paskutinė'}</div>
@@ -1709,7 +1789,7 @@ function sqHtml(id,bpm){
   const R=SQ.result&&SQ.id===id?SQ.result:null;let h=`<span class="eyebrow">Patikra mikrofonu · ${esc(SEQS[id].t)}</span>`;
   if(R&&R.empty)h+=`<span class="heard bad">Beveik nieko neišgirdau. Padėkite telefoną arčiau ir grokite garsiau.</span>`;
   else if(R){const pass=R.ok>=90&&R.onTime>=80;
-    h+=`<div class="rgrid"><div class="stat"><b>${R.ok}%</b><small>natų teisingai</small></div><div class="stat"><b>${R.onTime}%</b><small>laiku</small></div></div>${R.rounds>1?`<span class="muted" style="font-size:.82rem">Įvertinta ${R.n} natų (${String(R.rounds).replace(".",",")} rato).</span>`:''}<span class="muted" style="font-size:.82rem">Atimtas telefono vėlavimas ${R.lat} ms${R.base?`, jūsų vidutinis poslinkis ${R.base>0?'+':''}${R.base} ms (neskaičiuojamas klaida)`:''}. „Laiku“ reiškia ±50 ms nuo jūsų tempo, kaip ir akordų ritme.</span>${pass?'<b class="heard good">Švariai ir laiku! Ši diena įskaityta tikslui.</b>':''}`;
+    h+=`<div class="rgrid"><div class="stat"><b>${R.ok}%</b><small>natų teisingai</small></div><div class="stat"><b>${R.onTime}%</b><small>laiku</small></div></div>${R.rounds>1?`<span class="muted" style="font-size:.82rem">Įvertinta ${R.n} natų (${String(R.rounds).replace(".",",")} rato).</span>`:''}<span class="muted" style="font-size:.82rem">Atimtas telefono vėlavimas ${R.lat} ms${R.base?`, jūsų vidutinis poslinkis ${R.base>0?'+':''}${R.base} ms (neskaičiuojamas klaida)`:''}. „Laiku“ reiškia ±50 ms nuo jūsų tempo, kaip ir akordų ritme.</span>${pass?'<b class="heard good">Švariai ir laiku! Ši diena įskaityta tikslui.</b>':''}${R.lvl?`<div class="note" style="text-align:center"><b>${esc(R.lvl.txt.charAt(0).toUpperCase()+R.lvl.txt.slice(1))}</b></div>`:R.hint?`<span class="muted" style="font-size:.88rem">${esc(R.hint)}</span>`:''}`;
     const tips=seqTips(R);if(tips.length)h+=`<ul class="tips">${tips.map(t=>`<li>${esc(t)}</li>`).join('')}</ul>`;}
   else h+=`<span class="muted" style="font-size:.88rem">Paspaudus „Pradėti“ (laikmatį) arba mygtuką žemiau, programėlė groja metronomą ir tikrina kiekvieną natą: ar teisinga ir ar laiku. Po 4 tvaksnių įžangos pradėkite. Rezultatas pasirodys čia, kai baigsite visas ${seqBuild(id).length} natas. Telefoną padėkite netoli gitaros, ne ausinėse.</span>`;
   const opts=[...new Set([tgt-10,tgt,tgt+10])].filter(b=>b>=40);
